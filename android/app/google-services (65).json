@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "357296382847",
+    "project_id": "zuperr-apk",
+    "storage_bucket": "zuperr-apk.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:357296382847:android:c5110f17b0c600cf14f04a",
+        "android_client_info": {
+          "package_name": "com.example.zuperr"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "357296382847-ll0mjmv31qeg8ttspuc7i05179d3f8v8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDS5m2s_alh51LiGOV2LHx-owaxn4Y8e7s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "357296382847-ll0mjmv31qeg8ttspuc7i05179d3f8v8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
