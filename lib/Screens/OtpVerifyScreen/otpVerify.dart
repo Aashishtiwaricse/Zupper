@@ -1,12 +1,25 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:get/get_core/src/get_main.dart';
+import 'package:get/get_navigation/src/extension_navigation.dart';
+import 'package:zuperr/Screens/AboutYourSelf/aboutYourSelf.dart';
+import 'package:zuperr/Screens/HomeScreen/HomeScreen.dart';
 import 'package:zuperr/Screens/SignInScreen/signIn.dart';
+import 'package:zuperr/Services/GoogleAuthService.dart/googleAuth.dart';
 import 'package:zuperr/Services/auth_service.dart';
 
 class VerifyOtpScreen extends StatefulWidget {
   final String email;
   final String otp;
+  final String signupToken;
 
-  const VerifyOtpScreen({required this.email, required this.otp, super.key});
+  const VerifyOtpScreen({
+    required this.email,
+    required this.otp,
+    required this.signupToken,
+    super.key,
+  });
 
   @override
   State<VerifyOtpScreen> createState() => _VerifyOtpScreenState();
@@ -17,23 +30,81 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
     5,
     (index) => TextEditingController(),
   );
-
+  final GoogleAuthService googleAuthService = GoogleAuthService();
   final List<FocusNode> _focusNodes = List.generate(5, (index) => FocusNode());
 
   bool _isLoading = false;
   bool _isButtonEnabled = false;
-  bool _showError = false;
+  final bool _showError = false;
   final AuthService _authService = AuthService();
+  late String currentSignupToken;
+  Timer? _resendTimer;
+
+  int _remainingSeconds = 120;
+
+  bool _canResend = false;
+  void _startResendTimer() {
+    _resendTimer?.cancel();
+
+    setState(() {
+      _remainingSeconds = 60;
+      _canResend = false;
+    });
+
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      if (_remainingSeconds <= 1) {
+        timer.cancel();
+
+        setState(() {
+          _remainingSeconds = 0;
+          _canResend = true;
+        });
+      } else {
+        setState(() {
+          _remainingSeconds--;
+        });
+      }
+    });
+  }
+
+  String _formatRemainingTime() {
+    final minutes = _remainingSeconds ~/ 60;
+    final seconds = _remainingSeconds % 60;
+
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
 
   @override
   void initState() {
     super.initState();
-    print('from verify otp');
-    print(widget.otp);
+
+    currentSignupToken = widget.signupToken;
 
     for (var controller in _otpControllers) {
       controller.addListener(_checkOtpFilled);
     }
+    // Start 2-minute countdown
+    _startResendTimer();
+  }
+
+  @override
+  void dispose() {
+    _resendTimer?.cancel();
+
+    for (final controller in _otpControllers) {
+      controller.dispose();
+    }
+
+    for (final focusNode in _focusNodes) {
+      focusNode.dispose();
+    }
+
+    super.dispose();
   }
 
   void _checkOtpFilled() {
@@ -59,29 +130,32 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
 
       String enteredOtp = _otpControllers.map((e) => e.text).join();
 
-      final response = await _authService.verifyOtp(otp: enteredOtp);
+      final response = await _authService.verifyOtp(
+        otp: enteredOtp,
+        token: currentSignupToken,
+      );
 
       if (!mounted) return;
 
-     ScaffoldMessenger.of(context).showSnackBar(
-  SnackBar(
-    content: Text(
-      response["message"] ?? "OTP Verified Successfully",
-    ),
-    backgroundColor: Colors.green,
-  ),
-);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(response["message"] ?? "OTP Verified Successfully"),
+          backgroundColor: Colors.green,
+        ),
+      );
 
-await Future.delayed(const Duration(seconds: 1));
+      await Future.delayed(const Duration(seconds: 1));
 
-if (!mounted) return;
+      if (!mounted) return;
+      final String otpVerifiedToken = response["OtpVerifiedToken"] ?? "";
 
-Navigator.pushReplacement(
-  context,
-  MaterialPageRoute(
-    builder: (_) => const LoginScreen(),
-  ),
-);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              AboutYourselfScreen(otpVerifiedToken: otpVerifiedToken),
+        ),
+      );
 
       // Navigate to Login/Home Screen
       // Navigator.pushReplacement(...);
@@ -101,10 +175,27 @@ Navigator.pushReplacement(
   }
 
   Future<void> resendOtpApi() async {
+    if (!_canResend) return;
+
     try {
-      final response = await _authService.resendOtp();
+      final response = await _authService.resendOtp(
+        email: widget.email,
+        token: currentSignupToken,
+      );
+
+      print("Resend OTP Response: $response");
+
+      // Update token received from resend API
+      if (response["SignupToken"] != null) {
+        setState(() {
+          currentSignupToken = response["SignupToken"].toString();
+        });
+      }
 
       if (!mounted) return;
+
+      // Restart 2-minute timer after successful resend
+      _startResendTimer();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -113,6 +204,8 @@ Navigator.pushReplacement(
         ),
       );
     } catch (e) {
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
       );
@@ -253,7 +346,7 @@ Navigator.pushReplacement(
                                 decoration: BoxDecoration(
                                   color: (_isButtonEnabled && !_isLoading)
                                       ? Colors.blue
-                                      : Colors.blue.withOpacity(0.4),
+                                      : Colors.blue.withValues(alpha: 0.4),
                                   borderRadius: BorderRadius.circular(25),
                                 ),
                                 alignment: Alignment.center,
@@ -285,11 +378,16 @@ Navigator.pushReplacement(
                               children: [
                                 const Text("Didn't receive OTP? "),
                                 TextButton(
-                                  onPressed: resendOtpApi,
-                                  child: const Text(
-                                    "Resend OTP",
+                                  onPressed: _canResend ? resendOtpApi : null,
+                                  child: Text(
+                                    _canResend
+                                        ? "Resend OTP"
+                                        : "Resend OTP in ${_formatRemainingTime()}",
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
+                                      color: _canResend
+                                          ? Colors.blue
+                                          : Colors.grey,
                                     ),
                                   ),
                                 ),
@@ -313,31 +411,30 @@ Navigator.pushReplacement(
                             const SizedBox(height: 20),
 
                             /// GOOGLE
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(color: Colors.grey.shade300),
+                            ElevatedButton.icon(
+                              icon: Image.asset(
+                                "assets/google.png",
+                                height: 22,
                               ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  SizedBox(
-                                    height: 15,
-                                    width: 15,
-                                    child: Image.asset("assets/google.png"),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  const Text(
-                                    "Continue with Google",
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              label: const Text("Continue with Google"),
+                              onPressed: () async {
+                                try {
+                                  final response = await googleAuthService
+                                      .signInWithGoogle();
+
+                                  Get.snackbar(
+                                    "Success",
+                                    response["message"] ?? "Login Successful",
+                                  );
+
+                                  Get.offAll(() => const HomeScreen());
+                                } catch (e) {
+                                  Get.snackbar(
+                                    "Error",
+                                    e.toString().replaceAll("Exception: ", ""),
+                                  );
+                                }
+                              },
                             ),
                           ],
                         ),

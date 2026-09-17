@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:zuperr/Models/SimilarJobs/JobApplicationStatus/jobApplication.dart';
+import 'package:zuperr/Models/JobApplicationStatus/jobApplication.dart';
 import 'package:zuperr/Utils/AppConstants.dart';
 
 class JobApplicationService {

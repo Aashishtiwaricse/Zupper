@@ -27,3 +27,26 @@
       ),
     );
   }
+
+  Widget buildChip(String text) {
+  return Container(
+    padding: const EdgeInsets.symmetric(
+      horizontal: 16,
+      vertical: 10,
+    ),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(25),
+      border: Border.all(
+        color: const Color(0xffD1D5DB),
+      ),
+    ),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+      ),
+    ),
+  );
+}

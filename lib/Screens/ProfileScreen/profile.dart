@@ -2,21 +2,42 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:get/get_core/src/get_main.dart';
+import 'package:get/get_navigation/src/extension_navigation.dart';
+import 'package:get/get_navigation/src/snackbar/snackbar.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:zuperr/Models/InternshipModel/internship.dart';
+import 'package:zuperr/Screens/ProfileScreen/Accomplishment/profileAccomplishment.dart';
 import 'package:zuperr/Screens/ProfileScreen/JobScreenStatus.dart';
 import 'package:zuperr/Screens/ProfileScreen/ProfilePerformanceScreen.dart';
+import 'package:zuperr/Screens/ProfileScreen/Widgets/AcademicAchivement/achivementBottomSheet.dart';
+import 'package:zuperr/Screens/ProfileScreen/Widgets/AddSchoolEducationDialog.dart';
+import 'package:zuperr/Screens/ProfileScreen/Widgets/Employement/employment_bottom_sheet.dart';
+import 'package:zuperr/Screens/ProfileScreen/Widgets/Projects/ProjectBottomSheet.dart';
+import 'package:zuperr/Screens/ProfileScreen/Widgets/_infoItem.dart';
+import 'package:zuperr/Screens/ProfileScreen/Widgets/addEducation.dart';
 import 'package:zuperr/Screens/ProfileScreen/Widgets/emptyWidgets.dart';
+import 'package:zuperr/Screens/ProfileScreen/Widgets/internshipBottomModel.dart';
+import 'package:zuperr/Screens/ProfileScreen/Widgets/personal_details_bottom_sheet.dart';
+import 'package:zuperr/Screens/ProfileScreen/Widgets/skillsBottomSheet.dart';
 import 'package:zuperr/Screens/ProfileScreen/Widgets/widgets.dart';
 import 'package:zuperr/Services/CandidatesData/candidates.dart';
+import 'package:zuperr/Services/PofileUpdate/profile_update.dart';
+import 'package:zuperr/Services/UpdateUserData/updateCandidatesdata.dart';
 import 'package:zuperr/Services/profileUpdateData/updateProfile.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  ProfileScreenState createState() => ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? profile;
   bool isLoading = true;
   File? selectedResume;
@@ -100,8 +121,150 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final permanentCountryController = TextEditingController();
   final permanentPincodeController = TextEditingController();
 
+  String _monthName(String month) {
+    const months = {
+      "1": "Jan",
+      "01": "Jan",
+      "2": "Feb",
+      "02": "Feb",
+      "3": "Mar",
+      "03": "Mar",
+      "4": "Apr",
+      "04": "Apr",
+      "5": "May",
+      "05": "May",
+      "6": "Jun",
+      "06": "Jun",
+      "7": "Jul",
+      "07": "Jul",
+      "8": "Aug",
+      "08": "Aug",
+      "9": "Sep",
+      "09": "Sep",
+      "10": "Oct",
+      "11": "Nov",
+      "12": "Dec",
+    };
+
+    return months[month] ?? "";
+  }
+
   bool noExpiry = false;
   bool isCurrent = false;
+
+  Future<void> showProjectBottomSheet({
+    Map<String, dynamic>? project,
+    int? index,
+  }) async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return ProjectBottomSheet(
+          project: project,
+          index: index,
+          projects: List.from(profile?["projects"] ?? []),
+          onSaved: () {
+            setState(() {});
+          },
+        );
+      },
+    );
+  }
+
+  String currentLocation = "";
+  bool isGettingLocation = false;
+
+  Future<void> getCurrentLocation() async {
+    setState(() {
+      isGettingLocation = true;
+    });
+
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+    if (!serviceEnabled) {
+      Get.snackbar(
+        "Location",
+        "Please enable location services",
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        margin: const EdgeInsets.all(12),
+        borderRadius: 12,
+        duration: const Duration(seconds: 3),
+        icon: const Icon(Icons.location_off, color: Colors.white),
+      );
+
+      setState(() {
+        isGettingLocation = false;
+      });
+
+      return;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Location permission denied")),
+      );
+
+      setState(() {
+        isGettingLocation = false;
+      });
+
+      return;
+    }
+
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+
+    List<Placemark> placemarks = await placemarkFromCoordinates(
+      position.latitude,
+      position.longitude,
+    );
+
+    if (placemarks.isNotEmpty) {
+      final place = placemarks.first;
+
+      final location =
+          "${place.locality ?? place.subAdministrativeArea ?? ""}, ${place.administrativeArea ?? ""}";
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString("current_location", location);
+      await prefs.setString("current_location", location);
+      await prefs.setDouble("latitude", position.latitude);
+      await prefs.setDouble("longitude", position.longitude);
+
+      setState(() {
+        currentLocation = location;
+        isGettingLocation = false;
+      });
+    }
+  }
+
+  void showInternshipSheet({InternshipModel? internship, int? index}) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => InternshipBottomSheet(
+        internship: internship,
+        index: index,
+        internships: List.from(profile?['internships'] ?? []),
+        onSaved: () {
+          loadProfile(); // Refresh profile after save
+        },
+      ),
+    );
+  }
 
   Future<void> updateProfile() async {
     final Map<String, dynamic> body = {
@@ -142,10 +305,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         "preferredLocation": preferredLocationController.text,
 
         "availability": availabilityController.text,
-
-        "minimumSalaryLPA": int.tryParse(minSalaryController.text) ?? 0,
-
-        "maximumSalaryLPA": int.tryParse(maxSalaryController.text) ?? 0,
       },
 
       "keySkills": profile?["keySkills"],
@@ -182,7 +341,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const SnackBar(content: Text("Profile Updated Successfully")),
       );
 
-      loadProfile();
+      await loadProfile();
     } else {
       ScaffoldMessenger.of(
         context,
@@ -221,6 +380,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return ((completed / total) * 100).round();
   }
 
+  final List<String> indianLanguages = [
+    "Assamese",
+    "Bengali",
+    "Bodo",
+    "Dogri",
+    "English",
+    "Gujarati",
+    "Hindi",
+    "Kannada",
+    "Kashmiri",
+    "Konkani",
+    "Maithili",
+    "Malayalam",
+    "Manipuri (Meitei)",
+    "Marathi",
+    "Nepali",
+    "Odia",
+    "Punjabi",
+    "Sanskrit",
+    "Santali",
+    "Sindhi",
+    "Tamil",
+    "Telugu",
+    "Urdu",
+
+    // Other commonly used Indian languages
+    "Awadhi",
+    "Bhili/Bhilodi",
+    "Bhojpuri",
+    "Chhattisgarhi",
+    "Garhwali",
+    "Gondi",
+    "Haryanvi",
+    "Himachali",
+    "Ho",
+    "Kangri",
+    "Khasi",
+    "Kokborok",
+    "Kumaoni",
+    "Magahi",
+    "Mundari",
+    "Mizo",
+    "Rajasthani",
+    "Tulu",
+    "Wagdi",
+
+    "Other",
+  ];
+
+  String? selectedLanguage;
+  final TextEditingController otherLanguageController = TextEditingController();
   Widget _profileCompletionCard() {
     final percentage = getProfileCompletionPercentage();
     const total = 15;
@@ -244,11 +454,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   Text(
                     "Profile Completion",
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                   ),
                   Text(
                     "Complete your profile to get better matches",
-                    style: TextStyle(fontWeight: FontWeight.w300, fontSize: 14),
+                    style: TextStyle(fontWeight: FontWeight.w300, fontSize: 11),
                   ),
                 ],
               ),
@@ -257,7 +467,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 style: const TextStyle(
                   color: Color(0xff1E6BE3),
                   fontWeight: FontWeight.bold,
-                  fontSize: 18,
+                  fontSize: 14,
                 ),
               ),
             ],
@@ -287,279 +497,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _showPersonalDialog() async {
-    String gender = profile?["gender"] ?? "";
-    String maritalStatus = profile?["maritalStatus"] ?? "";
-
-    final dobController = TextEditingController(
-      text: profile?["dateOfBirth"] != null
-          ? profile!["dateOfBirth"].toString().substring(0, 10)
-          : "",
-    );
-
-    final noticeController = TextEditingController(
-      text: profile?["noticePeriod"]?.toString() ?? "",
-    );
-
-    await showDialog(
+  Future<void> showPersonalDialog() async {
+    await showModalBottomSheet(
       context: context,
-      builder: (_) {
-        return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return AlertDialog(
-              title: const Text("Edit Personal Details"),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DropdownButtonFormField<String>(
-                      value: gender.isEmpty ? null : gender,
-                      decoration: const InputDecoration(labelText: "Gender"),
-                      items: const [
-                        DropdownMenuItem(value: "Male", child: Text("Male")),
-                        DropdownMenuItem(
-                          value: "Female",
-                          child: Text("Female"),
-                        ),
-                        DropdownMenuItem(value: "Other", child: Text("Other")),
-                      ],
-                      onChanged: (value) {
-                        setStateDialog(() {
-                          gender = value!;
-                        });
-                      },
-                    ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => PersonalDetailsBottomSheet(
+        profile: Map<String, dynamic>.from(profile ?? {}),
+        onSave: (updatedProfile) async {
+          // Update parent profile with edited bottom-sheet data
+          setState(() {
+            profile = Map<String, dynamic>.from(updatedProfile);
+          });
 
-                    const SizedBox(height: 15),
+          // Send the NEW data to PUT API
+          await updateProfile();
 
-                    DropdownButtonFormField<String>(
-                      value: maritalStatus.isEmpty ? null : maritalStatus,
-                      decoration: const InputDecoration(
-                        labelText: "Marital Status",
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: "Single",
-                          child: Text("Single"),
-                        ),
-                        DropdownMenuItem(
-                          value: "Married",
-                          child: Text("Married"),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        setStateDialog(() {
-                          maritalStatus = value!;
-                        });
-                      },
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    TextField(
-                      controller: dobController,
-                      readOnly: true,
-                      decoration: const InputDecoration(
-                        labelText: "Date of Birth",
-                        suffixIcon: Icon(Icons.calendar_today),
-                      ),
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate:
-                              DateTime.tryParse(
-                                dobController.text.isEmpty
-                                    ? "2000-01-01"
-                                    : dobController.text,
-                              ) ??
-                              DateTime(2000),
-                          firstDate: DateTime(1950),
-                          lastDate: DateTime.now(),
-                        );
-
-                        if (picked != null) {
-                          dobController.text = picked
-                              .toIso8601String()
-                              .substring(0, 10);
-                        }
-                      },
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    TextField(
-                      controller: noticeController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: "Notice Period (Days)",
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    profile!["gender"] = gender;
-                    profile!["maritalStatus"] = maritalStatus;
-                    profile!["dateOfBirth"] = dobController.text;
-                    profile!["noticePeriod"] = noticeController.text;
-
-                    await updateProfile();
-
-                    setState(() {});
-
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Save"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _showEducationDialog(int index) async {
-    final education = profile?["educationAfter12th"][index];
-
-    final courseController = TextEditingController(
-      text: education["courseName"] ?? "",
-    );
-
-    final specializationController = TextEditingController(
-      text: education["specialization"] ?? "",
-    );
-
-    final instituteController = TextEditingController(
-      text: education["instituteName"] ?? "",
-    );
-
-    final yearController = TextEditingController(
-      text: education["passingYear"]?.toString() ?? "",
-    );
-
-    final percentageController = TextEditingController(
-      text: education["percentage"]?.toString() ?? "",
-    );
-
-    await showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Edit Education"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: courseController,
-                decoration: const InputDecoration(labelText: "Course"),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: specializationController,
-                decoration: const InputDecoration(labelText: "Specialization"),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: instituteController,
-                decoration: const InputDecoration(labelText: "Institute"),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: yearController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: "Passing Year"),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: percentageController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: "Percentage / CGPA",
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              profile!["educationAfter12th"][index]["courseName"] =
-                  courseController.text;
-
-              profile!["educationAfter12th"][index]["specialization"] =
-                  specializationController.text;
-
-              profile!["educationAfter12th"][index]["instituteName"] =
-                  instituteController.text;
-
-              profile!["educationAfter12th"][index]["passingYear"] =
-                  yearController.text;
-
-              profile!["educationAfter12th"][index]["percentage"] =
-                  percentageController.text;
-
-              await updateProfile();
-
-              setState(() {});
-
-              Navigator.pop(context);
-            },
-            child: const Text("Save"),
-          ),
-        ],
+          // Reload latest data from GET API
+          await loadProfile();
+        },
       ),
-    );
-  }
-
-  Future<void> _showNoticePeriodDialog() async {
-    noticePeriodController.text = profile?["noticePeriod"]?.toString() ?? "";
-
-    await showDialog(
-      context: context,
-      builder: (_) {
-        return AlertDialog(
-          title: const Text("Update Notice Period"),
-          content: TextField(
-            controller: noticePeriodController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: "Notice Period (Days)",
-              hintText: "e.g. 30",
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                // Update local profile
-                profile?["noticePeriod"] = noticePeriodController.text.trim();
-
-                await updateProfile();
-
-                setState(() {});
-
-                Navigator.pop(context);
-              },
-              child: const Text("Save"),
-            ),
-          ],
-        );
-      },
     );
   }
 
@@ -582,85 +539,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       print("Resume Pick Error: $e");
     }
-  }
-
-  Future<void> _showCTCDialog() async {
-    String preferredLocation =
-        profile?['careerPreference']?['preferredLocation'] ?? "";
-
-    await showDialog(
-      context: context,
-      builder: (_) {
-        return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return AlertDialog(
-              title: const Text("Update Salary Details"),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: minSalaryController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: "Minimum Salary (LPA)",
-                      ),
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    TextField(
-                      controller: maxSalaryController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: "Maximum Salary (LPA)",
-                      ),
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    TextFormField(
-                      initialValue: preferredLocation,
-                      decoration: const InputDecoration(
-                        labelText: "Preferred Location",
-                      ),
-                      onChanged: (value) {
-                        preferredLocation = value;
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
-                ),
-
-                ElevatedButton(
-                  onPressed: () async {
-                    // Update local profile
-                    profile?["careerPreference"]["minimumSalaryLPA"] =
-                        int.tryParse(minSalaryController.text) ?? 0;
-
-                    profile?["careerPreference"]["maximumSalaryLPA"] =
-                        int.tryParse(maxSalaryController.text) ?? 0;
-
-                    profile?["careerPreference"]["preferredLocation"] =
-                        preferredLocation;
-
-                    await updateProfile();
-
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Save"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
   }
 
   Future<void> _deleteResume() async {
@@ -690,7 +568,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    loadProfile();
+    refreshData();
+  }
+
+  Future<void> refreshData() async {
+    await loadProfile();
+
+    if (!mounted) return;
+
+    setState(() {});
   }
 
   Future<void> loadProfile() async {
@@ -741,158 +627,528 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _showCareerDialog() async {
-    await showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Edit Career Preference"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+    final career = profile?["careerPreference"] ?? {};
+
+    preferredLocationController.text =
+        career["preferredLocation"]?.toString() ?? "";
+
+    minSalaryController.text = career["minimumSalaryLPA"]?.toString() ?? "";
+
+    maxSalaryController.text = career["maximumSalaryLPA"]?.toString() ?? "";
+
+    bool isLoading = false;
+
+    List<String> selectedRoles = List<String>.from(career["jobRoles"] ?? []);
+
+    List<String> selectedJobTypes = List<String>.from(career["jobTypes"] ?? []);
+
+    String availability = career["availability"]?.toString() ?? "";
+    // ADD THIS
+    String? selectedSalaryRange;
+
+    final Map<String, Map<String, int>> salaryRanges = {
+      "1 - 10 LPA": {"minimum": 1, "maximum": 10},
+      "2 - 12 LPA": {"minimum": 2, "maximum": 12},
+      "3 - 15 LPA": {"minimum": 3, "maximum": 15},
+      "5 - 20 LPA": {"minimum": 5, "maximum": 20},
+      "10 - 25 LPA": {"minimum": 10, "maximum": 25},
+      "15 - 30 LPA": {"minimum": 15, "maximum": 30},
+    };
+    final existingMinimum = int.tryParse(
+      career["minimumSalaryLPA"]?.toString() ?? "",
+    );
+
+    final existingMaximum = int.tryParse(
+      career["maximumSalaryLPA"]?.toString() ?? "",
+    );
+    // ADD THIS
+    for (final entry in salaryRanges.entries) {
+      if (entry.value["minimum"] == existingMinimum &&
+          entry.value["maximum"] == existingMaximum) {
+        selectedSalaryRange = entry.key;
+        break;
+      }
+    }
+
+    final roleController = TextEditingController();
+
+    InputDecoration inputDecoration(String hint) {
+      return InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 16),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 18,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+          borderSide: BorderSide(color: Color(0xff4D8DFF)),
+        ),
+      );
+    }
+
+    Widget heading(String text, {bool required = true}) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: RichText(
+          text: TextSpan(
             children: [
-              TextField(
-                controller: preferredLocationController,
-                decoration: const InputDecoration(
-                  labelText: "Preferred Location",
+              TextSpan(
+                text: text,
+                style: const TextStyle(
+                  fontSize: 18,
+                  color: Color(0xff3C4352),
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-
-              const SizedBox(height: 15),
-
-              TextField(
-                controller: availabilityController,
-                decoration: const InputDecoration(labelText: "Availability"),
-              ),
-
-              const SizedBox(height: 15),
-
-              TextField(
-                controller: minSalaryController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: "Minimum Salary (LPA)",
+              if (required)
+                const TextSpan(
+                  text: "*",
+                  style: TextStyle(
+                    color: Colors.blue,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-
-              const SizedBox(height: 15),
-
-              TextField(
-                controller: maxSalaryController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: "Maximum Salary (LPA)",
-                ),
-              ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
+      );
+    }
+
+    Widget chip({
+      required String text,
+      required bool selected,
+      required VoidCallback onTap,
+    }) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 48,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xffEEF5FF) : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? const Color(0xff4D8DFF) : Colors.grey.shade300,
+            ),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              profile!["careerPreference"]["preferredLocation"] =
-                  preferredLocationController.text;
-
-              profile!["careerPreference"]["availability"] =
-                  availabilityController.text;
-
-              profile!["careerPreference"]["minimumSalaryLPA"] =
-                  int.tryParse(minSalaryController.text) ?? 0;
-
-              profile!["careerPreference"]["maximumSalaryLPA"] =
-                  int.tryParse(maxSalaryController.text) ?? 0;
-
-              await updateProfile();
-
-              setState(() {});
-
-              Navigator.pop(context);
-            },
-            child: const Text("Save"),
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 16,
+              color: selected
+                  ? const Color(0xff4D8DFF)
+                  : const Color(0xff3C4352),
+              fontWeight: FontWeight.w500,
+            ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showExperienceDialog() async {
-    String tempExperience = experienceLevel;
+        ),
+      );
+    }
 
     await showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (_) {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
-            return AlertDialog(
-              title: const Text("Update Experience"),
-
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<String>(
-                    value: tempExperience.isEmpty ? null : tempExperience,
-                    decoration: const InputDecoration(
-                      labelText: "Experience Level",
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: "fresher",
-                        child: Text("Fresher"),
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 18,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: Container(
+                width: 560,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 72,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade600,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
-                      DropdownMenuItem(
-                        value: "experienced",
-                        child: Text("Experienced"),
+
+                      const SizedBox(height: 28),
+
+                      const Text(
+                        "Career Preferences",
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      heading("Job Role (Max 3)"),
+
+                      const SizedBox(height: 8),
+
+                      TextField(
+                        controller: roleController,
+                        decoration: inputDecoration("Search and select"),
+                        onSubmitted: (value) {
+                          if (value.trim().isEmpty) return;
+
+                          if (selectedRoles.length >= 3) return;
+
+                          if (!selectedRoles.contains(value)) {
+                            setStateDialog(() {
+                              selectedRoles.add(value.trim());
+                            });
+                          }
+
+                          roleController.clear();
+                        },
+                      ),
+
+                      if (selectedRoles.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: selectedRoles
+                                .map(
+                                  (role) => Chip(
+                                    label: Text(role),
+                                    deleteIcon: const Icon(Icons.close),
+                                    onDeleted: () {
+                                      setStateDialog(() {
+                                        selectedRoles.remove(role);
+                                      });
+                                    },
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+
+                      const SizedBox(height: 28),
+
+                      heading("Preferred Job Type"),
+
+                      const SizedBox(height: 12),
+
+                      Row(
+                        children: [
+                          Expanded(
+                            child: chip(
+                              text: "Full Time",
+                              selected: selectedJobTypes.contains("Full Time"),
+                              onTap: () {
+                                setStateDialog(() {
+                                  if (selectedJobTypes.contains("Full Time")) {
+                                    selectedJobTypes.remove("Full Time");
+                                  } else {
+                                    selectedJobTypes.add("Full Time");
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: chip(
+                              text: "Part Time",
+                              selected: selectedJobTypes.contains("Part Time"),
+                              onTap: () {
+                                setStateDialog(() {
+                                  if (selectedJobTypes.contains("Part Time")) {
+                                    selectedJobTypes.remove("Part Time");
+                                  } else {
+                                    selectedJobTypes.add("Part Time");
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 28),
+                      heading("Availability to work"),
+
+                      const SizedBox(height: 12),
+
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children:
+                            [
+                              "<15 days",
+                              "1 month",
+                              "2 months",
+                              "3 month",
+                              "Serving notice period",
+                            ].map((item) {
+                              return SizedBox(
+                                width: item == "Serving notice period"
+                                    ? 210
+                                    : 140,
+                                child: chip(
+                                  text: item,
+                                  selected: availability == item,
+                                  onTap: () {
+                                    setStateDialog(() {
+                                      availability = item;
+                                    });
+                                  },
+                                ),
+                              );
+                            }).toList(),
+                      ),
+
+                      const SizedBox(height: 30),
+
+                      heading("Preferred Location", required: false),
+
+                      const SizedBox(height: 10),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 54,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(
+                            Icons.my_location,
+                            color: Color(0xff2F7CF6),
+                          ),
+                          label: Text(
+                            currentLocation.isNotEmpty
+                                ? currentLocation
+                                : "Detect Current Location",
+                            style: const TextStyle(
+                              color: Color(0xff2F7CF6),
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xff2F7CF6)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          onPressed: () async {
+                            await getCurrentLocation();
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(height: 28),
+
+                      heading(
+                        "Select Location Manually (optional)",
+                        required: false,
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      TextField(
+                        controller: preferredLocationController,
+                        decoration: inputDecoration("Enter your location"),
+                      ),
+
+                      const SizedBox(height: 28),
+
+                      heading("Salary Expectation (in ₹)"),
+
+                      const SizedBox(height: 10),
+
+                      DropdownButtonFormField<String>(
+                        value: selectedSalaryRange,
+                        decoration: inputDecoration("Select salary range"),
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                        borderRadius: BorderRadius.circular(12),
+                        items: salaryRanges.keys.map((range) {
+                          return DropdownMenuItem<String>(
+                            value: range,
+                            child: Text(range),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setStateDialog(() {
+                            selectedSalaryRange = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 30),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xff7DAEF7),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          onPressed: isLoading
+                              ? null
+                              : () async {
+                                  if (selectedRoles.isEmpty) {
+                                    Get.snackbar(
+                                      "Required",
+                                      "Please add at least one job role",
+                                      snackPosition: SnackPosition.TOP,
+                                      backgroundColor: Colors.red,
+                                      colorText: Colors.white,
+                                    );
+                                    return;
+                                  }
+
+                                  if (selectedJobTypes.isEmpty) {
+                                    Get.snackbar(
+                                      "Required",
+                                      "Please select preferred job type",
+                                      snackPosition: SnackPosition.TOP,
+                                      backgroundColor: Colors.red,
+                                      colorText: Colors.white,
+                                    );
+                                    return;
+                                  }
+
+                                  if (availability.isEmpty) {
+                                    Get.snackbar(
+                                      "Required",
+                                      "Please select availability",
+                                      snackPosition: SnackPosition.TOP,
+                                      backgroundColor: Colors.red,
+                                      colorText: Colors.white,
+                                    );
+                                    return;
+                                  }
+
+                                  if (minSalaryController.text.trim().isEmpty) {
+                                    Get.snackbar(
+                                      "Required",
+                                      "Please enter salary expectation",
+                                      snackPosition: SnackPosition.TOP,
+                                      backgroundColor: Colors.red,
+                                      colorText: Colors.white,
+                                    );
+                                    return;
+                                  }
+
+                                  setStateDialog(() {
+                                    isLoading = true;
+                                  });
+
+                                  // Convert salary values to numbers
+
+                                  final selectedRange =
+                                      salaryRanges[selectedSalaryRange!]!;
+
+                                  final minimumSalary =
+                                      selectedRange["minimum"]!;
+                                  final maximumSalary =
+                                      selectedRange["maximum"]!;
+
+                                  final careerPreference = {
+                                    "jobTypes": selectedJobTypes,
+
+                                    "availability": availability,
+
+                                    "preferredLocation":
+                                        preferredLocationController.text.trim(),
+
+                                    "minimumSalaryLPA": minimumSalary,
+
+                                    "maximumSalaryLPA": maximumSalary,
+
+                                    "jobRoles": selectedRoles,
+
+                                    "preferredShift":
+                                        career["preferredShift"] ?? "Day",
+
+                                    "locationPreferenceKM":
+                                        career["locationPreferenceKM"] ?? 0,
+
+                                    "preferredStates": List<String>.from(
+                                      career["preferredStates"] ?? [],
+                                    ),
+                                  };
+
+                                  debugPrint(
+                                    "CAREER PREFERENCE REQUEST => $careerPreference",
+                                  );
+
+                                  final success = await ProfileUpdateService()
+                                      .updateSingleField(
+                                        fieldName: "careerPreference",
+                                        value: careerPreference,
+                                      );
+
+                                  setStateDialog(() {
+                                    isLoading = false;
+                                  });
+
+                                  if (success) {
+                                    setState(() {
+                                      profile!["careerPreference"] =
+                                          careerPreference;
+                                    });
+
+                                    Navigator.pop(context);
+
+                                    Get.snackbar(
+                                      "Success",
+                                      "Career preference updated successfully",
+                                      snackPosition: SnackPosition.TOP,
+                                      backgroundColor: Colors.green,
+                                      colorText: Colors.white,
+                                    );
+                                  } else {
+                                    Get.snackbar(
+                                      "Error",
+                                      "Failed to update career preference",
+                                      snackPosition: SnackPosition.TOP,
+                                      backgroundColor: Colors.red,
+                                      colorText: Colors.white,
+                                    );
+                                  }
+                                },
+                          child: isLoading
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  "Save",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                        ),
                       ),
                     ],
-                    onChanged: (value) {
-                      setStateDialog(() {
-                        tempExperience = value!;
-                      });
-                    },
                   ),
-
-                  const SizedBox(height: 15),
-
-                  TextField(
-                    controller: minExpController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: "Minimum Experience",
-                    ),
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  TextField(
-                    controller: maxExpController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: "Maximum Experience",
-                    ),
-                  ),
-                ],
+                ),
               ),
-
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
-                ),
-
-                ElevatedButton(
-                  onPressed: () async {
-                    setState(() {
-                      experienceLevel = tempExperience;
-                    });
-                    await updateProfile();
-
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Save"),
-                ),
-              ],
             );
           },
         );
@@ -905,7 +1161,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+bool hasExperienceData() {
+  final history = profile?["employmentHistory"];
 
+  return history is List && history.isNotEmpty;
+}
+
+bool hasCurrentCTCData() {
+  final history = profile?["employmentHistory"];
+
+  if (history is! List || history.isEmpty) {
+    return false;
+  }
+
+  final currentJob = history.cast<Map>().where(
+    (job) => job["isCurrentJob"] == true,
+  );
+
+  if (currentJob.isEmpty) {
+    return false;
+  }
+
+  final ctc = currentJob.first["annualSalary"];
+
+  return ctc != null && ctc.toString().trim().isNotEmpty;
+}
+
+bool hasNoticePeriodData() {
+  final availability =
+      profile?["careerPreference"]?["availability"];
+
+  return availability != null &&
+      availability.toString().trim().isNotEmpty;
+}
     return Scaffold(
       backgroundColor: Colors.white,
       body: SingleChildScrollView(
@@ -947,100 +1235,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 10),
 
-            _detailTile(
-              keyName: "experience",
-              title: "Add Experience",
-              subtitle: "Showcase your professional journey",
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  infoRow(
-                    "Experience Level",
-                    experienceLevel.isEmpty ? "Not Added" : experienceLevel,
-                  ),
+        if (!hasExperienceData())
+  _detailTile(
+    keyName: "experience",
+    title: "Add Experience",
+    subtitle: "Showcase your professional journey",
+    onTap: showEmploymentSheet,
+  ),
 
-                  infoRow(
-                    "Min Experience",
-                    minExpController.text.isEmpty
-                        ? "-"
-                        : "${minExpController.text} Years",
-                  ),
+if (!hasCurrentCTCData())
+  _detailTile(
+    keyName: "ctc",
+    title: "Add Current CTC",
+    subtitle: "Get relevant salary-matched opportunities",
+    onTap: () {
+      final history = List<Map<String, dynamic>>.from(
+        profile?["employmentHistory"] ?? [],
+      );
 
-                  infoRow(
-                    "Max Experience",
-                    maxExpController.text.isEmpty
-                        ? "-"
-                        : "${maxExpController.text} Years",
-                  ),
+      final currentIndex = history.indexWhere(
+        (e) => e["isCurrentJob"] == true,
+      );
 
-                  const SizedBox(height: 15),
+      // Current employment does not exist
+      // Allow user to add it
+      if (currentIndex == -1) {
+        showEmploymentSheet();
+        return;
+      }
 
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _showExperienceDialog,
-                      icon: const Icon(Icons.edit),
-                      label: const Text("Edit"),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+      // Current employment exists but CTC is missing
+      // Open current employment for editing
+      showEmploymentSheet(
+        employment: history[currentIndex],
+        index: currentIndex,
+      );
+    },
+  ),
 
-            _detailTile(
-              keyName: "ctc",
-              title: "Add Current CTC",
-              subtitle: "Get relevant salary-matched opportunities",
-              child: Column(
-                children: [
-                  infoRow(
-                    "Minimum Salary",
-                    "₹${profile?['careerPreference']?['minimumSalaryLPA'] ?? '-'} LPA",
-                  ),
-
-                  infoRow(
-                    "Maximum Salary",
-                    "₹${profile?['careerPreference']?['maximumSalaryLPA'] ?? '-'} LPA",
-                  ),
-
-                  infoRow(
-                    "Preferred Location",
-                    profile?['careerPreference']?['preferredLocation'] ?? '-',
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  ElevatedButton.icon(
-                    onPressed: _showCTCDialog,
-                    icon: const Icon(Icons.edit),
-                    label: const Text("Edit"),
-                  ),
-                ],
-              ),
-            ),
-
-            _detailTile(
-              keyName: "noticePeriod",
-              title: "Add Notice Period",
-              subtitle: "Help recruiters understand your availability",
-              child: Column(
-                children: [
-                  infoRow(
-                    "Notice Period",
-                    profile?['noticePeriod'] ?? "Not Added",
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  ElevatedButton.icon(
-                    onPressed: _showNoticePeriodDialog,
-
-                    icon: const Icon(Icons.edit),
-                    label: const Text("Edit"),
-                  ),
-                ],
-              ),
-            ),
+if (!hasNoticePeriodData())
+  _detailTile(
+    keyName: "noticePeriod",
+    title: "Add Notice Period",
+    subtitle: "Help recruiters understand your availability",
+    onTap: _showCareerDialog,
+  ),
 
             const SizedBox(height: 20),
 
@@ -1058,6 +1297,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 16),
 
             _buildResumeSection(),
+            _buildSchoolEducationSection(),
             _buildEducationSection(),
             _buildPersonalSection(),
             _buildSkillsSection(),
@@ -1080,7 +1320,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required String keyName,
     required String title,
     required String subtitle,
-    required Widget child,
+    required VoidCallback onTap,
   }) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -1088,60 +1328,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Colors.black12)),
       ),
-      child: Column(
-        children: [
-          InkWell(
-            onTap: () {
-              setState(() {
-                expanded[keyName] = !(expanded[keyName] ?? false);
-              });
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              child: Row(
-                children: [
-                  const Icon(Icons.add, size: 23),
-                  const SizedBox(width: 15),
-
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle,
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          child: Row(
+            children: [
+              const Icon(Icons.add, size: 23),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(color: Colors.grey, fontSize: 14),
+                    ),
+                  ],
+                ),
               ),
-            ),
+              const Icon(Icons.chevron_right, color: Colors.grey),
+            ],
           ),
-
-          AnimatedCrossFade(
-            duration: const Duration(milliseconds: 300),
-            crossFadeState: expanded[keyName] == true
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
-            firstChild: const SizedBox(),
-            secondChild: Padding(
-              padding: const EdgeInsets.only(left: 38, right: 10, bottom: 16),
-              child: child,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1291,17 +1508,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ? profile!['dateOfBirth'].toString().substring(0, 10)
                   : "Not Added",
             ),
-            _personalRow(
-              "Notice Period",
-              profile?['noticePeriod'] ?? "Not Added",
-            ),
 
             const SizedBox(height: 20),
 
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: _showPersonalDialog,
+                onPressed: showPersonalDialog,
                 icon: const Icon(Icons.edit),
                 label: const Text("Edit"),
               ),
@@ -1338,55 +1551,141 @@ class _ProfileScreenState extends State<ProfileScreen> {
       subtitle: "Add your internships experience",
       bgColor: const Color(0xffEEF7FF),
       stripeColor: Colors.lightBlue,
-      child: internships.isEmpty
-          ? emptyBox("Add Internship")
-          : Column(
-              children: List.generate(internships.length, (index) {
-                final item = internships[index];
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          children: [
+            ...List.generate(internships.length, (index) {
+              final item = internships[index];
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
+              final from = DateTime.tryParse(item["duration"]?["from"] ?? "");
+
+              final to = DateTime.tryParse(item["duration"]?["to"] ?? "");
+
+              String durationText = "";
+
+              if (from != null && to != null) {
+                final months =
+                    ((to.year - from.year) * 12) + (to.month - from.month);
+
+                durationText =
+                    "${DateFormat("MMM yyyy").format(from)} - ${DateFormat("MMM yyyy").format(to)}  •  $months months";
+              }
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 20),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xffFAFAFA),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item["role"] ?? "",
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                item["companyName"] ?? "",
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () {
+                            showInternshipSheet(
+                              index: index,
+                              internship: InternshipModel.fromJson(
+                                internships[index],
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.edit_outlined, size: 26),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 15),
+
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.calendar_month_outlined,
+                          size: 22,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            durationText,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    Text(
+                      item["description"] ?? "",
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+
+            SizedBox(
+              width: double.infinity,
+              height: 58,
+              child: OutlinedButton.icon(
+                onPressed: showInternshipSheet,
+                icon: const Icon(Icons.add, size: 28),
+                label: const Text(
+                  "Add Internship",
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.black,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xffE5E7EB)),
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item['role'] ?? '',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(item['companyName'] ?? ''),
-                            const SizedBox(height: 5),
-                            Text(
-                              item['projectName'] ?? '',
-                              style: const TextStyle(color: Colors.grey),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () {
-                          _showInternshipDialog(index);
-                        },
-                      ),
-                    ],
-                  ),
-                );
-              }),
+                ),
+              ),
             ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1396,283 +1695,322 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return profileSection(
       keyName: "projects",
       title: "Projects",
-      subtitle: "Add your projects",
-      bgColor: const Color(0xffEEF7FF),
-      stripeColor: Colors.lightBlue,
-      child: projects.isEmpty
-          ? emptyBox("Add Project")
-          : Column(
-              children: List.generate(projects.length, (index) {
-                final item = projects[index];
+      subtitle: "Showcase your work and projects",
+      bgColor: const Color(0xffEEF3FF),
+      stripeColor: const Color(0xff5A67F2),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          children: [
+            ...List.generate(projects.length, (index) {
+              final item = projects[index];
 
-                final from = item['duration']?['from'] ?? '';
-                final to = item['duration']?['to'] ?? '';
+              final from = DateTime.tryParse(item["duration"]?["from"] ?? "");
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item['projectName'] ?? '',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 16,
-                              ),
-                            ),
+              final to = DateTime.tryParse(item["duration"]?["to"] ?? "");
 
-                            const SizedBox(height: 6),
+              String duration = "";
 
-                            Text(
-                              item['description'] ?? '',
-                              style: const TextStyle(fontSize: 14),
-                            ),
+              if (from != null && to != null) {
+                final months =
+                    ((to.year - from.year) * 12) + (to.month - from.month);
 
-                            const SizedBox(height: 6),
+                duration =
+                    "${DateFormat("MMM yyyy").format(from)} - ${DateFormat("MMM yyyy").format(to)}  •  $months months";
+              }
 
-                            Text(
-                              "Skills: ${item['keySkills'] ?? ''}",
-                              style: const TextStyle(color: Colors.grey),
-                            ),
+              final rawSkills = item["keySkills"];
 
-                            const SizedBox(height: 6),
+              final List<String> skills = rawSkills is List
+                  ? rawSkills
+                        .map((e) => e.toString().trim())
+                        .where((e) => e.isNotEmpty)
+                        .toList()
+                  : rawSkills
+                        .toString()
+                        .split(",")
+                        .map((e) => e.trim())
+                        .where((e) => e.isNotEmpty)
+                        .toList();
 
-                            Text(
-                              "Result: ${item['endResult'] ?? ''}",
-                              style: const TextStyle(color: Colors.grey),
-                            ),
-
-                            const SizedBox(height: 6),
-
-                            Text(
-                              "Duration: ${from.split('T').first} - ${to.split('T').first}",
-                              style: const TextStyle(color: Colors.grey),
-                            ),
-
-                            const SizedBox(height: 6),
-
-                            if ((item['projectURL'] ?? '')
-                                .toString()
-                                .isNotEmpty)
+              return Container(
+                margin: const EdgeInsets.only(bottom: 18),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xffFAFAFA),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                item['projectURL'],
+                                item["projectName"] ?? "",
                                 style: const TextStyle(
-                                  color: Colors.blue,
-                                  decoration: TextDecoration.underline,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
-                          ],
+
+                              const SizedBox(height: 5),
+
+                              Text(
+                                item["endResult"] ?? "",
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () {
-                          _showProjectDialog(index);
-                        },
+
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 24),
+                          onPressed: () {
+                            showProjectSheet(project: item, index: index);
+                          },
+                        ),
+                      ],
+                    ),
+
+                    if (duration.isNotEmpty) ...[
+                      const SizedBox(height: 15),
+
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.calendar_month_outlined,
+                            color: Colors.grey,
+                            size: 22,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              duration,
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
+
+                    const SizedBox(height: 18),
+
+                    Text(
+                      item["description"] ?? "",
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                        height: 1.5,
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+if (skills.isNotEmpty) ...[
+  const SizedBox(height: 18),
+
+  const Text(
+    "Skills Used",
+    style: TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w700,
+      color: Color(0xff374151),
+    ),
+  ),
+
+  const SizedBox(height: 10),
+
+  Wrap(
+    spacing: 10,
+    runSpacing: 10,
+    children: skills.map((skill) {
+      return Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 8,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xffEEF4FF),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(
+            color: const Color(0xffD7E3FF),
+          ),
+        ),
+        child: Text(
+          skill,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: Color(0xff374151),
+          ),
+        ),
+      );
+    }).toList(),
+  ),
+],
+
+                    const SizedBox(height: 22),
+
+                    if ((item["projectURL"] ?? "").toString().isNotEmpty)
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xffDFE8FF),
+                          foregroundColor: Colors.black87,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 15,
+                            vertical: 8,
+                          ),
+                        ),
+                        onPressed: () async {
+                          final uri = Uri.parse(item["projectURL"]);
+
+                          if (await canLaunchUrl(uri)) {
+                            launchUrl(uri);
+                          }
+                        },
+                        icon: const Icon(Icons.computer),
+                        label: const Text(
+                          "View Project",
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }),
+
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  showProjectSheet();
+                },
+                icon: const Icon(Icons.add, size: 26),
+                label: const Text(
+                  "Add Project",
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.black,
+                    fontWeight: FontWeight.w600,
                   ),
-                );
-              }),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xffE5E7EB)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
             ),
+          ],
+        ),
+      ),
     );
   }
 
-  Future<void> _showProjectDialog(int index) async {
-    final project = profile!["projects"][index];
-
-    projectNameController.text = project["projectName"] ?? "";
-    projectDescriptionController.text = project["description"] ?? "";
-    projectSkillsController.text = project["keySkills"] ?? "";
-    projectResultController.text = project["endResult"] ?? "";
-    projectUrlController.text = project["projectURL"] ?? "";
-
-    projectFromController.text =
-        project["duration"]?["from"]?.toString().substring(0, 10) ?? "";
-
-    projectToController.text =
-        project["duration"]?["to"]?.toString().substring(0, 10) ?? "";
-
-    await showDialog(
+  void showProjectSheet({Map<String, dynamic>? project, int? index}) async {
+    await showModalBottomSheet(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Edit Project"),
-        content: SizedBox(
-          width: 500,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: projectNameController,
-                  decoration: const InputDecoration(labelText: "Project Name"),
-                ),
-
-                const SizedBox(height: 12),
-
-                TextField(
-                  controller: projectDescriptionController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(labelText: "Description"),
-                ),
-
-                const SizedBox(height: 12),
-
-                TextField(
-                  controller: projectSkillsController,
-                  decoration: const InputDecoration(labelText: "Key Skills"),
-                ),
-
-                const SizedBox(height: 12),
-
-                TextField(
-                  controller: projectResultController,
-                  decoration: const InputDecoration(labelText: "End Result"),
-                ),
-
-                const SizedBox(height: 12),
-
-                TextField(
-                  controller: projectUrlController,
-                  decoration: const InputDecoration(labelText: "Project URL"),
-                ),
-
-                const SizedBox(height: 12),
-
-                TextField(
-                  controller: projectFromController,
-                  readOnly: true,
-                  decoration: const InputDecoration(
-                    labelText: "From Date",
-                    suffixIcon: Icon(Icons.calendar_today),
-                  ),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: projectFromController.text.isEmpty
-                          ? DateTime.now()
-                          : DateTime.parse(projectFromController.text),
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100),
-                    );
-
-                    if (picked != null) {
-                      projectFromController.text = picked
-                          .toIso8601String()
-                          .substring(0, 10);
-                    }
-                  },
-                ),
-
-                const SizedBox(height: 12),
-
-                TextField(
-                  controller: projectToController,
-                  readOnly: true,
-                  decoration: const InputDecoration(
-                    labelText: "To Date",
-                    suffixIcon: Icon(Icons.calendar_today),
-                  ),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: projectToController.text.isEmpty
-                          ? DateTime.now()
-                          : DateTime.parse(projectToController.text),
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100),
-                    );
-
-                    if (picked != null) {
-                      projectToController.text = picked
-                          .toIso8601String()
-                          .substring(0, 10);
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-
-          ElevatedButton(
-            onPressed: () async {
-              profile!["projects"][index] = {
-                ...project,
-                "projectName": projectNameController.text,
-                "description": projectDescriptionController.text,
-                "keySkills": projectSkillsController.text,
-                "endResult": projectResultController.text,
-                "projectURL": projectUrlController.text,
-                "duration": {
-                  "from": DateTime.parse(
-                    projectFromController.text,
-                  ).toIso8601String(),
-                  "to": DateTime.parse(
-                    projectToController.text,
-                  ).toIso8601String(),
-                },
-              };
-
-              await updateProfile();
-
-              setState(() {});
-
-              Navigator.pop(context);
-            },
-            child: const Text("Update"),
-          ),
-        ],
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ProjectBottomSheet(
+        project: project,
+        index: index,
+        projects: List.from(profile?["projects"] ?? []),
+        onSaved: () async {
+          await loadProfile();
+          if (mounted) setState(() {});
+        },
       ),
     );
   }
 
   Widget _buildProfileSummarySection() {
+    final summary = (profile?["profileSummary"] ?? "").toString().trim();
+
     return profileSection(
       keyName: "profileSummary",
       title: "Profile Summary",
-      subtitle: "Tell recruiters about yourself",
-      bgColor: const Color(0xffEEF7FF),
-      stripeColor: Colors.lightBlue,
-      child: (profile?["profileSummary"] ?? "").toString().trim().isEmpty
-          ? emptyBox("Add Profile Summary")
-          : Container(
+      subtitle: "Write a brief about yourself",
+      bgColor: const Color(0xffF2F0FF),
+      stripeColor: const Color(0xff7C4DFF),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          children: [
+            Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                color: const Color(0xffFAFAFA),
+                borderRadius: BorderRadius.circular(18),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      profile?["profileSummary"] ?? "",
-                      style: const TextStyle(fontSize: 15, height: 1.5),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: _showProfileSummaryDialog,
-                  ),
-                ],
+              child: Text(
+                summary.isEmpty ? "No profile summary added." : summary,
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.8,
+                  color: summary.isEmpty
+                      ? Colors.grey
+                      : const Color(0xff4B5563),
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
+
+            const SizedBox(height: 24),
+
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton.icon(
+                onPressed: _showProfileSummaryDialog,
+                icon: const Icon(Icons.add, size: 24, color: Color(0xff4B5563)),
+                label: Text(
+                  summary.isEmpty ? "Add Summary" : "Edit Summary",
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xff4B5563),
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  side: const BorderSide(color: Color(0xffE5E7EB)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1682,21 +2020,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return profileSection(
       keyName: "accomplishments",
       title: "Accomplishments",
-      subtitle: "Add your certifications and achievements",
-      bgColor: const Color(0xffEEF7FF),
-      stripeColor: Colors.lightBlue,
-      child: accomplishments.isEmpty
-          ? emptyBox("Add Accomplishment")
-          : Column(
-              children: List.generate(accomplishments.length, (index) {
+      subtitle: "List your achievements and awards",
+      bgColor: const Color(0xffFDF2F8),
+      stripeColor: const Color(0xffEC4899),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          children: [
+            if (accomplishments.isEmpty)
+              emptyBox("Add Accomplishment")
+            else
+              ...List.generate(accomplishments.length, (index) {
                 final item = accomplishments[index];
 
+                final validity = item["certificationValidity"] ?? {};
+
+                String date = "";
+
+                if (validity["month"] != null && validity["year"] != null) {
+                  date = "${_monthName(validity["month"])} ${validity["year"]}";
+                }
+
                 return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(14),
+                  margin: const EdgeInsets.only(bottom: 18),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 20,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
+                    color: const Color(0xffFAFAFA),
+                    borderRadius: BorderRadius.circular(18),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1708,494 +2066,188 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             Text(
                               item["certificationName"] ?? "",
                               style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-
-                            const SizedBox(height: 5),
-
-                            Text("Award : ${item["awards"] ?? ""}"),
-
-                            Text("Club : ${item["clubs"] ?? ""}"),
-
-                            Text("Position : ${item["positionHeld"] ?? ""}"),
-
-                            Text(
-                              "Certification ID : ${item["certificationID"] ?? ""}",
-                            ),
-
-                            Text(
-                              "Responsibilities : ${item["responsibilities"] ?? ""}",
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () {
-                          _showAccomplishmentDialog(index);
-                        },
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            ),
-    );
-  }
-
-  Widget _buildCompetitiveExamsSection() {
-    final exams = profile?["competitiveExams"] ?? [];
-
-    return profileSection(
-      keyName: "competitiveExams",
-      title: "Competitive Exams",
-      subtitle: "Add your competitive exam details",
-      bgColor: const Color(0xffEEF7FF),
-      stripeColor: Colors.lightBlue,
-      child: exams.isEmpty
-          ? emptyBox("Add Competitive Exam")
-          : Column(
-              children: List.generate(exams.length, (index) {
-                final item = exams[index];
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item["examName"] ?? "",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-
-                            const SizedBox(height: 5),
-
-                            Text("Exam Year: ${item["examYear"] ?? ""}"),
-
-                            Text(
-                              "Score: ${item["obtainedScore"] ?? ""} / ${item["maxScore"] ?? ""}",
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () {
-                          _showCompetitiveExamDialog(index);
-                        },
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            ),
-    );
-  }
-
-  Widget _buildEmploymentHistorySection() {
-    final jobs = profile?["employmentHistory"] ?? [];
-
-    return profileSection(
-      keyName: "employmentHistory",
-      title: "Employment History",
-      subtitle: "Add your work experience",
-      bgColor: const Color(0xffEEF7FF),
-      stripeColor: Colors.lightBlue,
-      child: jobs.isEmpty
-          ? emptyBox("Add Employment")
-          : Column(
-              children: List.generate(jobs.length, (index) {
-                final item = jobs[index];
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item["position"] ?? "",
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-
-                            const SizedBox(height: 4),
-
-                            Text(item["companyName"] ?? ""),
-
-                            const SizedBox(height: 4),
-
-                            Text("Salary : ₹${item["annualSalary"] ?? ""}"),
-
-                            const SizedBox(height: 4),
-
-                            Text(
-                              "Experience : ${item["workExperience"]?["years"] ?? 0} Years ${item["workExperience"]?["months"] ?? 0} Months",
-                            ),
-
-                            const SizedBox(height: 4),
-
-                            Text(
-                              item["description"] ?? "",
-                              style: const TextStyle(color: Colors.grey),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () {
-                          _showEmploymentDialog(index);
-                        },
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            ),
-    );
-  }
-
-  Widget _buildAcademicAchievementsSection() {
-    final achievements = profile?["academicAchievements"] ?? [];
-
-    return profileSection(
-      keyName: "academicAchievements",
-      title: "Academic Achievements",
-      subtitle: "Highlight your academic excellence",
-      bgColor: const Color(0xffEEF7FF),
-      stripeColor: Colors.lightBlue,
-      child: achievements.isEmpty
-          ? emptyBox("Add Academic Achievement")
-          : Column(
-              children: List.generate(achievements.length, (index) {
-                final item = achievements[index];
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item["achievement"] ?? "",
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-
-                            const SizedBox(height: 5),
-
-                            Text(
-                              item["topRank"] ?? "",
-                              style: const TextStyle(
                                 fontSize: 14,
-                                color: Colors.grey,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xff2D3748),
                               ),
                             ),
 
-                            const SizedBox(height: 2),
+                            const SizedBox(height: 8),
 
                             Text(
-                              "${item["educationReference"] ?? ""} • ${item["receivedDuring"] ?? ""}",
+                              "${item["awards"] ?? ""}${date.isNotEmpty ? " • $date" : ""}",
                               style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey,
+                                fontSize: 12,
+                                color: Color(0xff6B7280),
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
                         ),
                       ),
 
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () {
-                          _showAcademicAchievementDialog(index);
+                      InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () {
+                          showAccomplishmentSheet(
+                            accomplishment: accomplishments[index],
+                            index: index,
+                          );
                         },
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.edit_outlined,
+                            size: 20,
+                            color: Color(0xff374151),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 );
               }),
-            ),
-    );
-  }
 
-  Future<void> _showAcademicAchievementDialog(int index) async {
-    final item = profile!["academicAchievements"][index];
+            const SizedBox(height: 8),
 
-    achievementController.text = item["achievement"] ?? "";
-    receivedDuringController.text = item["receivedDuring"] ?? "";
-    educationReferenceController.text = item["educationReference"] ?? "";
-    topRankController.text = item["topRank"] ?? "";
-
-    await showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Edit Academic Achievement"),
-        content: SizedBox(
-          width: 450,
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                TextField(
-                  controller: achievementController,
-                  decoration: const InputDecoration(labelText: "Achievement"),
-                ),
-
-                const SizedBox(height: 12),
-
-                TextField(
-                  controller: topRankController,
-                  decoration: const InputDecoration(labelText: "Top Rank"),
-                ),
-
-                const SizedBox(height: 12),
-
-                TextField(
-                  controller: educationReferenceController,
-                  decoration: const InputDecoration(
-                    labelText: "Education Reference",
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  showAccomplishmentSheet();
+                },
+                icon: const Icon(Icons.add, size: 24, color: Color(0xff4B5563)),
+                label: const Text(
+                  "Add Accomplishment",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xff4B5563),
                   ),
                 ),
-
-                const SizedBox(height: 12),
-
-                TextField(
-                  controller: receivedDuringController,
-                  decoration: const InputDecoration(
-                    labelText: "Received During",
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  side: const BorderSide(color: Color(0xffE5E7EB)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-
-          ElevatedButton(
-            onPressed: () async {
-              profile!["academicAchievements"][index] = {
-                ...item,
-                "achievement": achievementController.text,
-                "receivedDuring": receivedDuringController.text,
-                "educationReference": educationReferenceController.text,
-                "topRank": topRankController.text,
-              };
-
-              await updateProfile();
-
-              setState(() {});
-
-              Navigator.pop(context);
-            },
-            child: const Text("Update"),
-          ),
-        ],
       ),
     );
   }
 
-  Future<void> _showEmploymentDialog(int index) async {
-    final item = profile!["employmentHistory"][index];
+  Future<void> _addAccomplishmentDialog() async {
+    certificationNameController.clear();
+    certificationIdController.clear();
+    certificationUrlController.clear();
+    awardsController.clear();
+    clubsController.clear();
+    positionHeldController.clear();
+    educationalReferenceController.clear();
+    responsibilitiesController.clear();
+    mediaUploadController.clear();
+    certificationMonthController.clear();
+    certificationYearController.clear();
+    accomplishmentFromController.clear();
+    accomplishmentToController.clear();
 
-    companyNameController.text = item["companyName"] ?? "";
-    positionController.text = item["position"] ?? "";
-    annualSalaryController.text = item["annualSalary"] ?? "";
-    keyAchievementsController.text = item["keyAchievements"] ?? "";
-    employmentDescriptionController.text = item["description"] ?? "";
-
-    workYearsController.text =
-        item["workExperience"]?["years"]?.toString() ?? "";
-
-    workMonthsController.text =
-        item["workExperience"]?["months"]?.toString() ?? "";
-
-    employmentFromController.text =
-        item["duration"]?["from"]?.substring(0, 10) ?? "";
-
-    employmentToController.text =
-        item["duration"]?["to"]?.substring(0, 10) ?? "";
-
-    isCurrentJob = item["isCurrentJob"] ?? false;
+    noExpiry = false;
+    isCurrent = false;
 
     await showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
-            title: const Text("Edit Employment"),
+            title: const Text("Add Accomplishment"),
             content: SizedBox(
               width: 500,
               child: SingleChildScrollView(
                 child: Column(
                   children: [
                     TextField(
-                      controller: companyNameController,
+                      controller: certificationNameController,
                       decoration: const InputDecoration(
-                        labelText: "Company Name",
+                        labelText: "Certification Name",
                       ),
                     ),
-
-                    const SizedBox(height: 12),
-
                     TextField(
-                      controller: positionController,
-                      decoration: const InputDecoration(labelText: "Position"),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    TextField(
-                      controller: annualSalaryController,
-                      keyboardType: TextInputType.number,
+                      controller: certificationIdController,
                       decoration: const InputDecoration(
-                        labelText: "Annual Salary",
+                        labelText: "Certification ID",
                       ),
                     ),
-
-                    const SizedBox(height: 12),
-
                     TextField(
-                      controller: workYearsController,
-                      keyboardType: TextInputType.number,
+                      controller: certificationUrlController,
                       decoration: const InputDecoration(
-                        labelText: "Experience (Years)",
+                        labelText: "Certification URL",
                       ),
                     ),
-
-                    const SizedBox(height: 12),
-
                     TextField(
-                      controller: workMonthsController,
-                      keyboardType: TextInputType.number,
+                      controller: awardsController,
+                      decoration: const InputDecoration(labelText: "Awards"),
+                    ),
+                    TextField(
+                      controller: clubsController,
+                      decoration: const InputDecoration(labelText: "Clubs"),
+                    ),
+                    TextField(
+                      controller: positionHeldController,
                       decoration: const InputDecoration(
-                        labelText: "Experience (Months)",
+                        labelText: "Position Held",
                       ),
                     ),
-
-                    const SizedBox(height: 12),
-
                     TextField(
-                      controller: keyAchievementsController,
+                      controller: educationalReferenceController,
+                      decoration: const InputDecoration(
+                        labelText: "Educational Reference",
+                      ),
+                    ),
+                    TextField(
+                      controller: responsibilitiesController,
                       maxLines: 3,
                       decoration: const InputDecoration(
-                        labelText: "Key Achievements",
+                        labelText: "Responsibilities",
                       ),
                     ),
-
-                    const SizedBox(height: 12),
-
                     TextField(
-                      controller: employmentDescriptionController,
-                      maxLines: 3,
+                      controller: mediaUploadController,
                       decoration: const InputDecoration(
-                        labelText: "Job Description",
+                        labelText: "Media Upload URL",
                       ),
                     ),
-
-                    const SizedBox(height: 12),
-
                     TextField(
-                      controller: employmentFromController,
-                      readOnly: true,
+                      controller: certificationMonthController,
                       decoration: const InputDecoration(
-                        labelText: "From Date",
-                        suffixIcon: Icon(Icons.calendar_today),
+                        labelText: "Expiry Month",
                       ),
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: employmentFromController.text.isEmpty
-                              ? DateTime.now()
-                              : DateTime.parse(employmentFromController.text),
-                          firstDate: DateTime(1990),
-                          lastDate: DateTime(2100),
-                        );
-
-                        if (picked != null) {
-                          employmentFromController.text = picked
-                              .toIso8601String()
-                              .substring(0, 10);
-                        }
+                    ),
+                    TextField(
+                      controller: certificationYearController,
+                      decoration: const InputDecoration(
+                        labelText: "Expiry Year",
+                      ),
+                    ),
+                    CheckboxListTile(
+                      value: noExpiry,
+                      title: const Text("No Expiry"),
+                      onChanged: (v) {
+                        setDialogState(() {
+                          noExpiry = v!;
+                        });
                       },
                     ),
-
-                    const SizedBox(height: 12),
-
-                    TextField(
-                      controller: employmentToController,
-                      readOnly: isCurrentJob,
-                      decoration: const InputDecoration(
-                        labelText: "To Date",
-                        suffixIcon: Icon(Icons.calendar_today),
-                      ),
-                      onTap: isCurrentJob
-                          ? null
-                          : () async {
-                              final picked = await showDatePicker(
-                                context: context,
-                                initialDate: employmentToController.text.isEmpty
-                                    ? DateTime.now()
-                                    : DateTime.parse(
-                                        employmentToController.text,
-                                      ),
-                                firstDate: DateTime(1990),
-                                lastDate: DateTime(2100),
-                              );
-
-                              if (picked != null) {
-                                employmentToController.text = picked
-                                    .toIso8601String()
-                                    .substring(0, 10);
-                              }
-                            },
-                    ),
-
                     CheckboxListTile(
-                      title: const Text("Current Job"),
-                      value: isCurrentJob,
-                      onChanged: (value) {
+                      value: isCurrent,
+                      title: const Text("Current"),
+                      onChanged: (v) {
                         setDialogState(() {
-                          isCurrentJob = value!;
+                          isCurrent = v!;
                         });
                       },
                     ),
@@ -2208,40 +2260,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onPressed: () => Navigator.pop(context),
                 child: const Text("Cancel"),
               ),
-
               ElevatedButton(
                 onPressed: () async {
-                  profile!["employmentHistory"][index] = {
-                    ...item,
-                    "companyName": companyNameController.text,
-                    "position": positionController.text,
-                    "annualSalary": annualSalaryController.text,
-                    "keyAchievements": keyAchievementsController.text,
-                    "description": employmentDescriptionController.text,
-                    "isCurrentJob": isCurrentJob,
-                    "workExperience": {
-                      "years": int.tryParse(workYearsController.text) ?? 0,
-                      "months": int.tryParse(workMonthsController.text) ?? 0,
+                  List<dynamic> accomplishments = List.from(
+                    profile?["accomplishments"] ?? [],
+                  );
+
+                  accomplishments.add({
+                    "certificationName": certificationNameController.text
+                        .trim(),
+                    "certificationID": certificationIdController.text.trim(),
+                    "certificationURL": certificationUrlController.text.trim(),
+                    "awards": awardsController.text.trim(),
+                    "clubs": clubsController.text.trim(),
+                    "positionHeld": positionHeldController.text.trim(),
+                    "educationalReference": educationalReferenceController.text
+                        .trim(),
+                    "responsibilities": responsibilitiesController.text.trim(),
+                    "mediaUpload": mediaUploadController.text.trim(),
+                    "noExpiry": noExpiry,
+                    "isCurrent": isCurrent,
+                    "certificationValidity": {
+                      "month": certificationMonthController.text.trim(),
+                      "year": certificationYearController.text.trim(),
                     },
                     "duration": {
                       "from": DateTime.parse(
-                        employmentFromController.text,
+                        accomplishmentFromController.text,
                       ).toIso8601String(),
-                      "to": isCurrentJob
-                          ? null
-                          : DateTime.parse(
-                              employmentToController.text,
-                            ).toIso8601String(),
+                      "to": DateTime.parse(
+                        accomplishmentToController.text,
+                      ).toIso8601String(),
                     },
-                  };
+                  });
 
-                  await updateProfile();
+                  final success = await ProfileUpdateService().updateProfile(
+                    data: {"accomplishments": accomplishments},
+                  );
 
-                  setState(() {});
+                  if (success) {
+                    setState(() {
+                      profile!["accomplishments"] = accomplishments;
+                    });
 
-                  Navigator.pop(context);
+                    Navigator.pop(context);
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Accomplishment added successfully"),
+                      ),
+                    );
+                  }
                 },
-                child: const Text("Update"),
+                child: const Text("Add"),
               ),
             ],
           );
@@ -2250,273 +2321,924 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _showCompetitiveExamDialog(int index) async {
-    final exam = profile!["competitiveExams"][index];
+  Widget _buildCompetitiveExamsSection() {
+    final exams = profile?["competitiveExams"] ?? [];
 
-    examNameController.text = exam["examName"] ?? "";
-    examYearController.text = exam["examYear"] ?? "";
-    obtainedScoreController.text = exam["obtainedScore"] ?? "";
-    maxScoreController.text = exam["maxScore"] ?? "";
+    return profileSection(
+      keyName: "competitiveExams",
+      title: "Entrance Exams",
+      subtitle: "List down any entrance exams you have given",
+      bgColor: const Color(0xffFFF7ED),
+      stripeColor: const Color(0xffF97316),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          children: [
+            if (exams.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                decoration: BoxDecoration(
+                  color: const Color(0xffFAFAFA),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Center(
+                  child: Text(
+                    "No entrance exams added",
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                ),
+              )
+            else
+              ...List.generate(exams.length, (index) {
+                final item = exams[index];
+
+                final String examName = item["examName"]?.toString() ?? "";
+
+                final String examDate = item["examMonth"] != null
+                    ? "${_monthName(item["examMonth"].toString())} ${item["examYear"]}"
+                    : (item["examYear"]?.toString() ?? "");
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 18),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 20,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xffFAFAFA),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              examName,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xff2F3542),
+                              ),
+                            ),
+
+                            const SizedBox(height: 8),
+
+                            Text(
+                              examDate,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xff6B7280),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () {
+                          showCompetitiveExamDialog(
+                            exam: exams[index],
+                            index: index,
+                          );
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: Icon(
+                            Icons.edit_outlined,
+                            size: 20,
+                            color: Color(0xff374151),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+
+            const SizedBox(height: 10),
+
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: showCompetitiveExamDialog,
+                icon: const Icon(Icons.add, size: 24, color: Color(0xff4B5563)),
+                label: const Text(
+                  "Add Entrance Exams",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xff4B5563),
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  side: const BorderSide(color: Color(0xffE5E7EB)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> showCompetitiveExamDialog({
+    Map<String, dynamic>? exam,
+    int? index,
+  }) async {
+    examNameController.text = exam?["examName"] ?? "";
+    obtainedScoreController.text = exam?["obtainedScore"]?.toString() ?? "";
+    maxScoreController.text = exam?["maxScore"]?.toString() ?? "";
+
+    String? selectedYear = exam?["examYear"]?.toString();
+
+    bool isLoading = false;
+
+    final List<String> years = List.generate(
+      DateTime.now().year - 1990 + 1,
+      (index) => (DateTime.now().year - index).toString(),
+    );
+
+    InputDecoration inputDecoration(String hint) {
+      return InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 16),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 18,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+          borderSide: BorderSide(color: Color(0xff4D8DFF)),
+        ),
+      );
+    }
+
+    Widget title(String text) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: text,
+                style: const TextStyle(
+                  color: Color(0xff3C4352),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const TextSpan(
+                text: "*",
+                style: TextStyle(
+                  color: Colors.blue,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     await showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Edit Competitive Exam"),
-        content: SizedBox(
-          width: 450,
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                TextField(
-                  controller: examNameController,
-                  decoration: const InputDecoration(labelText: "Exam Name"),
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 18,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: Container(
+                width: 520,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(28),
                 ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 74,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade600,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
 
-                const SizedBox(height: 12),
+                      const SizedBox(height: 24),
 
-                TextField(
-                  controller: examYearController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: "Exam Year"),
-                ),
+                      Text(
+                        exam == null
+                            ? "Add Entrance Exam"
+                            : "Edit Entrance Exam",
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
 
-                const SizedBox(height: 12),
+                      const SizedBox(height: 14),
 
-                TextField(
-                  controller: obtainedScoreController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: "Obtained Score",
+                      Text(
+                        "Competitive Exams are capturing your achievements in exams that demonstrate skills, knowledge, or qualifications for academic or professional growth.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 15,
+                          height: 1.5,
+                        ),
+                      ),
+
+                      const SizedBox(height: 30),
+
+                      title("Exam Name"),
+
+                      const SizedBox(height: 8),
+
+                      TextField(
+                        controller: examNameController,
+                        decoration: inputDecoration(
+                          "Search and select exam name",
+                        ),
+                      ),
+
+                      const SizedBox(height: 22),
+
+                      title("Exam Year"),
+
+                      const SizedBox(height: 8),
+
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedYear,
+                        decoration: inputDecoration("Select exam year"),
+                        items: years
+                            .map(
+                              (year) => DropdownMenuItem(
+                                value: year,
+                                child: Text(year),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setStateDialog(() {
+                            selectedYear = value;
+                          });
+                        },
+                      ),
+
+                      const SizedBox(height: 22),
+
+                      title("Score/Percentile"),
+
+                      const SizedBox(height: 8),
+
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: obtainedScoreController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: inputDecoration("Obtained"),
+                            ),
+                          ),
+
+                          const SizedBox(width: 12),
+
+                          Expanded(
+                            child: TextField(
+                              controller: maxScoreController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: inputDecoration("Maximum"),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 28),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xff7DAEF7),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: isLoading
+                              ? null
+                              : () async {
+                                  if (examNameController.text.trim().isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text("Please enter exam name"),
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  if (selectedYear == null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          "Please select exam year",
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  if (obtainedScoreController.text
+                                      .trim()
+                                      .isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          "Please enter obtained score",
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  if (maxScoreController.text.trim().isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          "Please enter maximum score",
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  setStateDialog(() {
+                                    isLoading = true;
+                                  });
+
+                                  List<dynamic> exams = List.from(
+                                    profile?["competitiveExams"] ?? [],
+                                  );
+
+                                  final examData = {
+                                    "examName": examNameController.text.trim(),
+                                    "examYear": selectedYear,
+                                    "obtainedScore":
+                                        double.tryParse(
+                                          obtainedScoreController.text,
+                                        ) ??
+                                        0,
+                                    "maxScore":
+                                        double.tryParse(
+                                          maxScoreController.text,
+                                        ) ??
+                                        0,
+                                  };
+
+                                  if (index == null) {
+                                    exams.add(examData);
+                                  } else {
+                                    exams[index] = examData;
+                                  }
+
+                                  final success = await ProfileUpdateService()
+                                      .updateProfile(
+                                        data: {"competitiveExams": exams},
+                                      );
+
+                                  setStateDialog(() {
+                                    isLoading = false;
+                                  });
+
+                                  if (success) {
+                                    setState(() {
+                                      profile!["competitiveExams"] = exams;
+                                    });
+
+                                    Navigator.pop(context);
+
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          "Competitive exam added successfully",
+                                        ),
+                                      ),
+                                    );
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          "Failed to add competitive exam",
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                          child: isLoading
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  "Save",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
-                const SizedBox(height: 12),
+  Widget _buildEmploymentHistorySection() {
+    final jobs = profile?["employmentHistory"] ?? [];
 
-                TextField(
-                  controller: maxScoreController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: "Maximum Score"),
-                ),
-              ],
-            ),
-          ),
+    return profileSection(
+      keyName: "employmentHistory",
+      title: "Employment History",
+      subtitle: "Add your work experience",
+      bgColor: const Color(0xffFDF2F4),
+      stripeColor: const Color(0xffF43F5E),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
+        child: Column(
+          children: [
+            if (jobs.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                decoration: BoxDecoration(
+                  color: const Color(0xffFAFAFA),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Center(
+                  child: Text(
+                    "No employment history added",
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                ),
+              )
+            else
+              ...List.generate(jobs.length, (index) {
+                final item = jobs[index];
 
-          ElevatedButton(
-            onPressed: () async {
-              profile!["competitiveExams"][index] = {
-                ...exam,
-                "examName": examNameController.text,
-                "examYear": examYearController.text,
-                "obtainedScore": obtainedScoreController.text,
-                "maxScore": maxScoreController.text,
-              };
+                final from = DateTime.tryParse(item["duration"]?["from"] ?? "");
 
-              await updateProfile();
+                final to = item["isCurrentJob"] == true
+                    ? null
+                    : DateTime.tryParse(item["duration"]?["to"] ?? "");
 
-              setState(() {});
+                String duration = "";
 
-              Navigator.pop(context);
-            },
-            child: const Text("Update"),
+                if (from != null) {
+                  duration =
+                      "${DateFormat("MMM yyyy").format(from)} - ${to == null ? "Present" : DateFormat("MMM yyyy").format(to)}";
+
+                  final years = item["workExperience"]?["years"] ?? 0;
+                  final months = item["workExperience"]?["months"] ?? 0;
+
+                  if (years > 0 || months > 0) {
+                    duration +=
+                        "  •  ${years > 0 ? "$years year${years > 1 ? "s" : ""}" : ""}${years > 0 && months > 0 ? " " : ""}${months > 0 ? "$months month${months > 1 ? "s" : ""}" : ""}";
+                  }
+                }
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 18),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xffFAFAFA),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item["position"] ?? "",
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xff2F3542),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  item["companyName"] ?? "",
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xff6B7280),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          InkWell(
+                            borderRadius: BorderRadius.circular(20),
+                            onTap: () {
+                              showEmploymentSheet(
+                                employment: jobs[index],
+                                index: index,
+                              );
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.all(6),
+                              child: Icon(
+                                Icons.edit_outlined,
+                                size: 24,
+                                color: Color(0xff374151),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      if (duration.isNotEmpty) ...[
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_month_outlined,
+                              size: 20,
+                              color: Color(0xff6B7280),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                duration,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xff6B7280),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      if ((item["description"] ?? "")
+                          .toString()
+                          .isNotEmpty) ...[
+                        const SizedBox(height: 20),
+                        Text(
+                          item["description"],
+                          style: const TextStyle(
+                            fontSize: 12,
+                            height: 1.6,
+                            color: Color(0xff6B7280),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              }),
+
+            const SizedBox(height: 10),
+
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  showEmploymentSheet();
+                },
+                icon: const Icon(Icons.add, size: 24, color: Color(0xff4B5563)),
+                label: const Text(
+                  "Add Employment",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    color: Color(0xff4B5563),
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  side: const BorderSide(color: Color(0xffE5E7EB)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> showEmploymentSheet({
+    Map<String, dynamic>? employment,
+    int? index,
+  }) async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return EmploymentBottomSheet(
+          initialData: employment,
+          onSave: (employmentData) async {
+            final List history = List.from(profile?["employmentHistory"] ?? []);
+
+            // ============================================================
+            // ONLY ONE EMPLOYMENT CAN HAVE isCurrentJob = true
+            // ============================================================
+            if (employmentData["isCurrentJob"] == true) {
+              final bool anotherCurrentJob = history.asMap().entries.any((
+                entry,
+              ) {
+                final int existingIndex = entry.key;
+
+                final Map<String, dynamic> existingJob =
+                    Map<String, dynamic>.from(entry.value);
+
+                // When editing an existing job, ignore that same job.
+                if (index != null && existingIndex == index) {
+                  return false;
+                }
+
+                return existingJob["isCurrentJob"] == true;
+              });
+
+              if (anotherCurrentJob) {
+                if (mounted) {
+                  Get.snackbar(
+                    "Current Employment Already Exists",
+                    "Please deselect 'Currently work here' from your previous employment and update its end date first.",
+                    snackPosition: SnackPosition.TOP,
+                    backgroundColor: Colors.red,
+                    colorText: Colors.white,
+                    margin: const EdgeInsets.all(16),
+                    borderRadius: 12,
+                    duration: const Duration(seconds: 6),
+                  );
+                }
+
+                // IMPORTANT:
+                // Do NOT auto-deselect the previous employer.
+                // Do NOT save the new employment.
+                return;
+              }
+            }
+
+            // ============================================================
+            // ADD NEW EMPLOYMENT
+            // ============================================================
+            if (index == null) {
+              history.add(employmentData);
+            }
+            // ============================================================
+            // UPDATE EXISTING EMPLOYMENT
+            // ============================================================
+            else {
+              history[index] = employmentData;
+            }
+
+            // ============================================================
+            // UPDATE PROFILE API
+            // ============================================================
+            final success = await ProfileUpdateService().updateProfile(
+              data: {"employmentHistory": history},
+            );
+
+            if (success) {
+              setState(() {
+                profile!["employmentHistory"] = history;
+              });
+
+              if (mounted) {
+                Navigator.pop(context);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      index == null
+                          ? "Employment added successfully"
+                          : "Employment updated successfully",
+                    ),
+                  ),
+                );
+              }
+            }
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildAcademicAchievementsSection() {
+    final achievements = profile?["academicAchievements"] ?? [];
+
+    return profileSection(
+      keyName: "academicAchievements",
+      title: "Academic Achievements",
+      subtitle: "Highlight your academic excellence",
+      bgColor: const Color(0xffEEF7FF),
+      stripeColor: Colors.lightBlue,
+      child: Column(
+        children: [
+          if (achievements.isEmpty)
+            emptyBox("Add Academic Achievement")
+          else
+            ...List.generate(achievements.length, (index) {
+              final item = achievements[index];
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item["achievement"] ?? "",
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            item["topRank"] ?? "",
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            "${item["educationReference"] ?? ""} • ${item["receivedDuring"] ?? ""}",
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.edit),
+                      onPressed: () =>
+                          _showAcademicAchievementDialog(index: index),
+                    ),
+                  ],
+                ),
+              );
+            }),
+
+          const SizedBox(height: 15),
+
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _showAcademicAchievementDialog(),
+              icon: const Icon(Icons.add),
+              label: const Text("Add Academic Achievement"),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _showAccomplishmentDialog(int index) async {
-    final item = profile!["accomplishments"][index];
+  Future<void> _showAcademicAchievementDialog({int? index}) async {
+    final isEdit = index != null;
 
-    certificationNameController.text = item["certificationName"] ?? "";
-    certificationIdController.text = item["certificationID"] ?? "";
-    certificationUrlController.text = item["certificationURL"] ?? "";
+    Map<String, dynamic> item = {};
 
-    awardsController.text = item["awards"] ?? "";
-    clubsController.text = item["clubs"] ?? "";
-    positionHeldController.text = item["positionHeld"] ?? "";
-    educationalReferenceController.text = item["educationalReference"] ?? "";
-    responsibilitiesController.text = item["responsibilities"] ?? "";
-    mediaUploadController.text = item["mediaUpload"] ?? "";
+    if (isEdit) {
+      item = profile!["academicAchievements"][index];
+    }
 
-    certificationMonthController.text =
-        item["certificationValidity"]?["month"] ?? "";
-
-    certificationYearController.text =
-        item["certificationValidity"]?["year"] ?? "";
-
-    accomplishmentFromController.text =
-        item["duration"]?["from"]?.substring(0, 10) ?? "";
-
-    accomplishmentToController.text =
-        item["duration"]?["to"]?.substring(0, 10) ?? "";
-
-    noExpiry = item["noExpiry"] ?? false;
-    isCurrent = item["isCurrent"] ?? false;
-
-    await showDialog(
+    await showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (_) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text("Edit Accomplishment"),
-              content: SizedBox(
-                width: 500,
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      TextField(
-                        controller: certificationNameController,
-                        decoration: const InputDecoration(
-                          labelText: "Certification Name",
-                        ),
-                      ),
-
-                      TextField(
-                        controller: certificationIdController,
-                        decoration: const InputDecoration(
-                          labelText: "Certification ID",
-                        ),
-                      ),
-
-                      TextField(
-                        controller: certificationUrlController,
-                        decoration: const InputDecoration(
-                          labelText: "Certification URL",
-                        ),
-                      ),
-
-                      TextField(
-                        controller: awardsController,
-                        decoration: const InputDecoration(labelText: "Awards"),
-                      ),
-
-                      TextField(
-                        controller: clubsController,
-                        decoration: const InputDecoration(labelText: "Clubs"),
-                      ),
-
-                      TextField(
-                        controller: positionHeldController,
-                        decoration: const InputDecoration(
-                          labelText: "Position Held",
-                        ),
-                      ),
-
-                      TextField(
-                        controller: educationalReferenceController,
-                        decoration: const InputDecoration(
-                          labelText: "Educational Reference",
-                        ),
-                      ),
-
-                      TextField(
-                        controller: responsibilitiesController,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          labelText: "Responsibilities",
-                        ),
-                      ),
-
-                      TextField(
-                        controller: mediaUploadController,
-                        decoration: const InputDecoration(
-                          labelText: "Media URL",
-                        ),
-                      ),
-
-                      TextField(
-                        controller: certificationMonthController,
-                        decoration: const InputDecoration(
-                          labelText: "Expiry Month",
-                        ),
-                      ),
-
-                      TextField(
-                        controller: certificationYearController,
-                        decoration: const InputDecoration(
-                          labelText: "Expiry Year",
-                        ),
-                      ),
-
-                      CheckboxListTile(
-                        value: noExpiry,
-                        title: const Text("No Expiry"),
-                        onChanged: (v) {
-                          setDialogState(() {
-                            noExpiry = v!;
-                          });
-                        },
-                      ),
-
-                      CheckboxListTile(
-                        value: isCurrent,
-                        title: const Text("Current"),
-                        onChanged: (v) {
-                          setDialogState(() {
-                            isCurrent = v!;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
-                ),
-
-                ElevatedButton(
-                  onPressed: () async {
-                    profile!["accomplishments"][index] = {
-                      ...item,
-                      "certificationName": certificationNameController.text,
-                      "certificationID": certificationIdController.text,
-                      "certificationURL": certificationUrlController.text,
-                      "awards": awardsController.text,
-                      "clubs": clubsController.text,
-                      "positionHeld": positionHeldController.text,
-                      "educationalReference":
-                          educationalReferenceController.text,
-                      "responsibilities": responsibilitiesController.text,
-                      "mediaUpload": mediaUploadController.text,
-                      "noExpiry": noExpiry,
-                      "isCurrent": isCurrent,
-                      "certificationValidity": {
-                        "month": certificationMonthController.text,
-                        "year": certificationYearController.text,
-                      },
-                      "duration": {
-                        "from": DateTime.parse(
-                          accomplishmentFromController.text,
-                        ).toIso8601String(),
-                        "to": DateTime.parse(
-                          accomplishmentToController.text,
-                        ).toIso8601String(),
-                      },
-                    };
-
-                    await updateProfile();
-
-                    setState(() {});
-
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Update"),
-                ),
-              ],
+        return AcademicAchievementBottomSheet(
+          loading: false,
+          initialData: item,
+          onSave: (data) async {
+            List<dynamic> achievements = List.from(
+              profile?["academicAchievements"] ?? [],
             );
+
+            if (isEdit) {
+              achievements[index] = {...achievements[index], ...data};
+            } else {
+              achievements.add(data);
+            }
+
+            final success = await ProfileUpdateService().updateProfile(
+              data: {"academicAchievements": achievements},
+            );
+
+            if (success) {
+              setState(() {
+                profile!["academicAchievements"] = achievements;
+              });
+
+              if (mounted) {
+                //  Navigator.of(bottomSheetContext).pop();
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      isEdit
+                          ? "Academic Achievement Updated"
+                          : "Academic Achievement Added",
+                    ),
+                  ),
+                );
+              }
+            }
           },
         );
       },
+    );
+  }
+
+  Future<void> showAccomplishmentSheet({
+    Map<String, dynamic>? accomplishment,
+    int? index,
+  }) async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AccomplishmentBottomSheet(
+        accomplishment: accomplishment,
+        index: index,
+        accomplishments: List.from(profile?["accomplishments"] ?? []),
+        onSaved: () async {
+          await loadProfile();
+          setState(() {});
+        },
+      ),
     );
   }
 
@@ -2525,103 +3247,209 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     await showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Edit Profile Summary"),
-        content: SizedBox(
-          width: 500,
-          child: TextField(
-            controller: summaryController,
-            maxLines: 6,
-            decoration: const InputDecoration(
-              hintText: "Write something about yourself...",
-              border: OutlineInputBorder(),
-            ),
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(28),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              profile!["profileSummary"] = summaryController.text.trim();
+          child: StatefulBuilder(
+            builder: (context, setStateDialog) {
+              return Container(
+                width: 560,
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      /// Handle
+                      Container(
+                        width: 72,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade600,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
 
-              await updateProfile();
+                      const SizedBox(height: 28),
 
-              setState(() {});
+                      const Text(
+                        "Profile Summary",
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xff242833),
+                        ),
+                      ),
 
-              Navigator.pop(context);
+                      const SizedBox(height: 18),
+
+                      Text(
+                        "Your profile summary should highlight key points from your career and education, your professional interests, and the kind of career you're looking for. Write at least 50 characters (max. 1000 characters).",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 1.6,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+
+                      const SizedBox(height: 30),
+
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: RichText(
+                          text: const TextSpan(
+                            children: [
+                              TextSpan(
+                                text: "Profile Summary",
+                                style: TextStyle(
+                                  color: Color(0xff3C4352),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              TextSpan(
+                                text: "*",
+                                style: TextStyle(
+                                  color: Colors.blue,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      TextField(
+                        controller: summaryController,
+                        maxLines: 6,
+                        maxLength: 1000,
+                        onChanged: (_) {
+                          setStateDialog(() {});
+                        },
+                        decoration: InputDecoration(
+                          hintText: "Write a detailed description",
+                          hintStyle: TextStyle(
+                            color: Colors.grey.shade400,
+                            fontSize: 16,
+                          ),
+                          counterText: "",
+                          contentPadding: const EdgeInsets.all(18),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          focusedBorder: const OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(14)),
+                            borderSide: BorderSide(color: Color(0xff4A90FF)),
+                          ),
+                        ),
+                      ),
+
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          "${summaryController.text.length}/1000 characters",
+                          style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 28),
+
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 56,
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(
+                                    color: Color(0xff2F7CF6),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                },
+                                child: const Text(
+                                  "Back",
+                                  style: TextStyle(
+                                    color: Color(0xff2F7CF6),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(width: 16),
+
+                          Expanded(
+                            child: SizedBox(
+                              height: 56,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xff7EAFF7),
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                onPressed: () async {
+                                  profile!["profileSummary"] = summaryController
+                                      .text
+                                      .trim();
+
+                                  await updateProfile();
+
+                                  setState(() {});
+
+                                  Navigator.pop(context);
+                                },
+                                child: const Text(
+                                  "Next",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
             },
-            child: const Text("Update"),
           ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showInternshipDialog(int index) async {
-    final internship = profile?["internships"][index];
-
-    internshipRoleController.text = internship["role"] ?? "";
-    internshipCompanyController.text = internship["companyName"] ?? "";
-    internshipProjectController.text = internship["projectName"] ?? "";
-
-    await showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Edit Internship"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: internshipRoleController,
-                decoration: const InputDecoration(labelText: "Role"),
-              ),
-
-              const SizedBox(height: 15),
-
-              TextField(
-                controller: internshipCompanyController,
-                decoration: const InputDecoration(labelText: "Company Name"),
-              ),
-
-              const SizedBox(height: 15),
-
-              TextField(
-                controller: internshipProjectController,
-                decoration: const InputDecoration(labelText: "Project Name"),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              profile!["internships"][index]["role"] =
-                  internshipRoleController.text;
-
-              profile!["internships"][index]["companyName"] =
-                  internshipCompanyController.text;
-
-              profile!["internships"][index]["projectName"] =
-                  internshipProjectController.text;
-
-              await updateProfile();
-
-              setState(() {});
-
-              Navigator.pop(context);
-            },
-            child: const Text("Save"),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -2632,6 +3460,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required Color bgColor,
     required Color stripeColor,
     required Widget child,
+    VoidCallback? onAdd,
   }) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -2688,6 +3517,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ],
                             ),
                           ),
+                          if (onAdd != null)
+                            ElevatedButton.icon(
+                              onPressed: onAdd,
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text("Add"),
+                              style: ElevatedButton.styleFrom(
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                              ),
+                            ),
 
                           Icon(
                             expanded[keyName] == true
@@ -2721,9 +3562,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       subtitle: "Add your educational qualifications",
       bgColor: const Color(0xffEAF3FF),
       stripeColor: const Color(0xff2B78F0),
-      child: education.isEmpty
-          ? emptyBox("Add Education")
-          : Column(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Add Button
+          const SizedBox(height: 16),
+
+          // Education List
+          if (education.isEmpty)
+            emptyBox("Add Education")
+          else
+            Column(
               children: education.map<Widget>((e) {
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -2751,11 +3600,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ],
                         ),
                       ),
-
                       IconButton(
                         icon: const Icon(Icons.edit_outlined),
                         onPressed: () {
-                          _showEducationDialog(education.indexOf(e));
+                          showDialog(
+                            context: context,
+
+                            builder: (_) => AddEducationDialog(
+                              educationData: e,
+
+                              index: education.indexOf(e),
+
+                              educationList: education,
+                            ),
+                          );
                         },
                       ),
                     ],
@@ -2763,6 +3621,167 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 );
               }).toList(),
             ),
+          Align(
+            alignment: Alignment.center,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (_) => AddEducationDialog(educationList: education),
+                );
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text("Add Education"),
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSchoolEducationSection() {
+    final schoolEducation = profile?['educationTill12th'] ?? [];
+
+    return profileSection(
+      keyName: "schoolEducation",
+      title: "School Education",
+      subtitle: "Add your 10th and 12th qualifications",
+      bgColor: const Color(0xffEAF3FF),
+      stripeColor: const Color(0xff2B78F0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 16),
+
+          if (schoolEducation.isEmpty)
+            emptyBox("Add 10th / 12th Education")
+          else
+            Column(
+              children: schoolEducation.map<Widget>((e) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              e["education"] ?? "",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 18,
+                              ),
+                            ),
+
+                            const SizedBox(height: 6),
+
+                            Text(
+                              e["examinationBoard"] ?? "",
+                              style: const TextStyle(fontSize: 15),
+                            ),
+
+                            const SizedBox(height: 8),
+
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.school,
+                                  size: 18,
+                                  color: Colors.grey.shade600,
+                                ),
+
+                                const SizedBox(width: 6),
+
+                                Text(
+                                  "${e["gradeType"]}",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 6),
+
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.calendar_month,
+                                  size: 18,
+                                  color: Colors.grey.shade600,
+                                ),
+
+                                const SizedBox(width: 6),
+
+                                Text("Passed : ${e["passingYear"]}"),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined),
+                        onPressed: () async {
+                          final refresh = await showDialog<bool>(
+                            context: context,
+                            builder: (_) => AddSchoolEducationDialog(
+                              educationData: e,
+                              index: schoolEducation.indexOf(e),
+                              educationList: schoolEducation,
+                            ),
+                          );
+
+                          if (refresh == true) {
+                            refreshData();
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+
+          const SizedBox(height: 10),
+
+          Align(
+            alignment: Alignment.center,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text("Add 10th / 12th"),
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              onPressed: () async {
+                final refresh = await showDialog<bool>(
+                  context: context,
+                  builder: (_) =>
+                      AddSchoolEducationDialog(educationList: schoolEducation),
+                );
+
+                if (refresh == true) {
+                  refreshData();
+                }
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2788,7 +3807,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 15),
 
               DropdownButtonFormField<String>(
-                value: proficiencyController.text.isEmpty
+                initialValue: proficiencyController.text.isEmpty
                     ? null
                     : proficiencyController.text,
                 decoration: const InputDecoration(labelText: "Proficiency"),
@@ -2799,6 +3818,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Text("Intermediate"),
                   ),
                   DropdownMenuItem(value: "Advanced", child: Text("Advanced")),
+                  DropdownMenuItem(
+                    value: "Professional",
+                    child: Text("Professional"),
+                  ),
                   DropdownMenuItem(value: "Native", child: Text("Native")),
                 ],
                 onChanged: (value) {
@@ -2815,17 +3838,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              profile!["languages"][index]["language"] =
-                  languageController.text;
+              // Create a copy of the existing languages list
+              List<dynamic> languages = List.from(profile?["languages"] ?? []);
 
-              profile!["languages"][index]["proficiencyLevel"] =
-                  proficiencyController.text;
+              // Update the selected language
+              languages[index] = {
+                "language": languageController.text.trim(),
+                "proficiencyLevel": proficiencyController.text.trim(),
+              };
 
-              await updateProfile();
+              final success = await ProfileUpdateService().updateProfile(
+                data: {"languages": languages},
+              );
 
-              setState(() {});
+              if (success) {
+                setState(() {
+                  profile!["languages"] = languages;
+                });
 
-              Navigator.pop(context);
+                Navigator.pop(context);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Language updated successfully"),
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Failed to update language")),
+                );
+              }
             },
             child: const Text("Save"),
           ),
@@ -2834,8 +3876,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _editSkillsDialog() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return SkillsBottomSheet(
+          selectedSkills: List.from(profile?["keySkills"] ?? []),
+          profileSummary: profile?["profileSummary"] ?? "",
+          onSaved: () async {
+            await loadProfile(); // Your existing profile API
+            if (mounted) {
+              setState(() {});
+            }
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildSkillsSection() {
-    final skills = profile?['keySkills'] ?? [];
+    final List skills = profile?["keySkills"] ?? [];
 
     return profileSection(
       keyName: "skills",
@@ -2854,48 +3916,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              "Skills expert in",
+              "Skills Expert in",
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
 
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: skills.map<Widget>((skill) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(color: const Color(0xffD9D9D9)),
-                  ),
+            if (skills.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 22),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Center(
                   child: Text(
-                    skill['Name'] ?? '',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    "No Skills Added",
+                    style: TextStyle(fontSize: 15),
                   ),
-                );
-              }).toList(),
-            ),
+                ),
+              )
+            else
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: skills.map<Widget>((skill) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xffEEF4FF),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Text(
+                      skill["Name"],
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 25),
 
             SizedBox(
               width: double.infinity,
+              height: 52,
               child: OutlinedButton.icon(
-                onPressed: _editSkillsDialog,
                 icon: const Icon(Icons.edit),
                 label: const Text(
                   "Edit Skills",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  style: TextStyle(fontWeight: FontWeight.w600),
                 ),
+                onPressed: _editSkillsDialog,
               ),
             ),
           ],
@@ -2904,52 +3982,330 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _editSkillsDialog() async {
-    skillsController.text =
-        (profile?['keySkills'] as List?)
-            ?.map((e) => e['Name'].toString())
-            .join(', ') ??
-        '';
+  Future<void> _editlanguagage({int? index}) async {
+    String? selectedLanguageLocal;
+    String? selectedProficiency;
+
+    final List languages = List.from(profile?["languages"] ?? []);
+
+    // EDIT MODE
+    if (index != null && index >= 0 && index < languages.length) {
+      final existingLanguage = Map<String, dynamic>.from(languages[index]);
+
+      final existingLanguageName = existingLanguage["language"]?.toString();
+
+      final existingProficiency = existingLanguage["proficiencyLevel"]
+          ?.toString();
+
+      if (indianLanguages.contains(existingLanguageName)) {
+        selectedLanguageLocal = existingLanguageName;
+      } else {
+        selectedLanguageLocal = "Other";
+        otherLanguageController.text = existingLanguageName ?? "";
+      }
+
+      selectedProficiency = existingProficiency;
+    } else {
+      // ADD MODE
+      selectedLanguageLocal = null;
+      selectedProficiency = null;
+      otherLanguageController.clear();
+    }
+
+    InputDecoration inputDecoration(String hint) {
+      return InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 16),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 18,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+          borderSide: BorderSide(color: Color(0xff4D8DFF)),
+        ),
+      );
+    }
 
     await showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Edit Skills"),
-        content: TextField(
-          controller: skillsController,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            hintText: "Flutter, Dart, Firebase, REST API",
-            labelText: "Skills (Comma Separated)",
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final skills = skillsController.text
-                  .split(',')
-                  .map((e) => e.trim())
-                  .where((e) => e.isNotEmpty)
-                  .toList();
+      barrierDismissible: false,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 20,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: Container(
+                width: 540,
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      /// Handle
+                      Container(
+                        width: 70,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade600,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
 
-              // Convert back to the format expected by your UI/API
-              profile!["keySkills"] = skills.map((e) => {"Name": e}).toList();
+                      const SizedBox(height: 28),
 
-              await updateProfile();
+                      const Text(
+                        "Languages",
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
 
-              setState(() {});
+                      const SizedBox(height: 14),
 
-              Navigator.pop(context);
-            },
-            child: const Text("Save"),
-          ),
-        ],
-      ),
+                      Text(
+                        "Languages lets you specify the languages you are proficient in, helping employers assess your communication skills and match you with roles that require specific language expertise.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 15,
+                          height: 1.5,
+                        ),
+                      ),
+
+                      const SizedBox(height: 30),
+
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: RichText(
+                          text: const TextSpan(
+                            children: [
+                              TextSpan(
+                                text: "Languages Spoken",
+                                style: TextStyle(
+                                  color: Color(0xff3C4352),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              TextSpan(
+                                text: "*",
+                                style: TextStyle(color: Colors.blue),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      DropdownButtonFormField<String>(
+                        value: selectedLanguageLocal,
+                        decoration: inputDecoration("Select Language"),
+                        isExpanded: true,
+                        items: indianLanguages.map((language) {
+                          return DropdownMenuItem<String>(
+                            value: language,
+                            child: Text(language),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setStateDialog(() {
+                            selectedLanguageLocal = value;
+
+                            if (value != "Other") {
+                              otherLanguageController.clear();
+                            }
+                          });
+                        },
+                      ),
+
+                      if (selectedLanguageLocal == "Other") ...[
+                        const SizedBox(height: 16),
+
+                        TextField(
+                          controller: otherLanguageController,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: inputDecoration("Enter your language"),
+                        ),
+                      ],
+
+                      const SizedBox(height: 24),
+
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: RichText(
+                          text: const TextSpan(
+                            children: [
+                              TextSpan(
+                                text: "Proficiency Level",
+                                style: TextStyle(
+                                  color: Color(0xff3C4352),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              TextSpan(
+                                text: "*",
+                                style: TextStyle(color: Colors.blue),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      DropdownButtonFormField<String>(
+                        value: selectedProficiency,
+                        decoration: inputDecoration("Select proficiency level"),
+                        items: const [
+                          DropdownMenuItem(
+                            value: "Basic",
+                            child: Text("Basic"),
+                          ),
+                          DropdownMenuItem(
+                            value: "Conversational",
+                            child: Text("Conversational"),
+                          ),
+                          DropdownMenuItem(
+                            value: "Intermediate",
+                            child: Text("Intermediate"),
+                          ),
+                          DropdownMenuItem(
+                            value: "Fluent",
+                            child: Text("Fluent"),
+                          ),
+                          DropdownMenuItem(
+                            value: "Native",
+                            child: Text("Native"),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          setStateDialog(() {
+                            selectedProficiency = value;
+                          });
+                        },
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xff7DAEF7),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          onPressed: () async {
+                            final language = selectedLanguageLocal == "Other"
+                                ? otherLanguageController.text.trim()
+                                : selectedLanguageLocal;
+
+                            if (language == null || language.isEmpty) {
+                              Get.snackbar(
+                                "Required",
+                                "Please select a language",
+                                snackPosition: SnackPosition.BOTTOM,
+                              );
+                              return;
+                            }
+
+                            if (selectedProficiency == null ||
+                                selectedProficiency!.isEmpty) {
+                              Get.snackbar(
+                                "Required",
+                                "Please select proficiency level",
+                                snackPosition: SnackPosition.BOTTOM,
+                              );
+                              return;
+                            }
+
+                            final List existingLanguages = List.from(
+                              profile?["languages"] ?? [],
+                            );
+
+                            final Map<String, dynamic> languageData = {
+                              "language": language,
+                              "proficiencyLevel": selectedProficiency,
+                            };
+
+                            if (index != null &&
+                                index >= 0 &&
+                                index < existingLanguages.length) {
+                              // EDIT EXISTING LANGUAGE
+                              existingLanguages[index] = languageData;
+                            } else {
+                              // ADD NEW LANGUAGE
+                              existingLanguages.add(languageData);
+                            }
+
+                            final success = await updateCandiDatesdata.update(
+                              updatedFields: {"languages": existingLanguages},
+                            );
+
+                            if (!mounted) return;
+
+                            if (success) {
+                              await loadProfile();
+
+                              Navigator.pop(context);
+
+                              Get.snackbar(
+                                "Success",
+                                index != null
+                                    ? "Language updated successfully"
+                                    : "Language added successfully",
+                                snackPosition: SnackPosition.BOTTOM,
+                              );
+                            } else {
+                              Get.snackbar(
+                                "Error",
+                                "Failed to update language",
+                                snackPosition: SnackPosition.BOTTOM,
+                              );
+                            }
+                          },
+
+                          child: const Text(
+                            "Save",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -2963,27 +4319,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
       bgColor: const Color(0xffF3F2FA),
       stripeColor: Colors.indigo,
       child: Column(
-        children: List.generate(languages.length, (index) {
-          final lang = languages[index];
+        children: [
+          ...List.generate(languages.length, (index) {
+            final lang = languages[index];
 
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: ListTile(
-              title: Text(lang['language'] ?? ""),
-              subtitle: Text(lang['proficiencyLevel'] ?? ""),
-              trailing: IconButton(
-                icon: const Icon(Icons.edit),
-                onPressed: () => _showLanguageDialog(index),
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ListTile(
+                title: Text(lang['language'] ?? ""),
+                subtitle: Text(lang['proficiencyLevel'] ?? ""),
+                trailing: IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: () {
+                    _editlanguagage(index: index);
+                  },
+                ),
               ),
+            );
+          }),
+
+          const SizedBox(height: 16),
+
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text("Add Language"),
+              onPressed: _editlanguagage,
             ),
-          );
-        }),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildCareerSection() {
     final career = profile?['careerPreference'] ?? {};
+    debugPrint("CAREER PROFILE => $career");
+    debugPrint("MIN SALARY => ${career['minimumSalaryLPA']}");
+    debugPrint("MAX SALARY => ${career['maximumSalaryLPA']}");
+    final List jobTypes = career['jobTypes'] ?? [];
+    final List jobRoles = career['jobRoles'] ?? [];
+    final List states = career['preferredStates'] ?? [];
+    String? selectedSalaryRange;
 
     return profileSection(
       keyName: "career",
@@ -2993,34 +4371,113 @@ class _ProfileScreenState extends State<ProfileScreen> {
       stripeColor: Colors.green,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Preferred Location: ${career['preferredLocation'] ?? '-'}"),
+            /// Preferred Job Type
+            const Text(
+              "Preferred Job Type",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
 
-            const SizedBox(height: 8),
+            const SizedBox(height: 15),
 
-            Text("Availability: ${career['availability'] ?? '-'}"),
-
-            const SizedBox(height: 8),
-
-            Text(
-              "Salary: ₹${career['minimumSalaryLPA'] ?? 0} - ₹${career['maximumSalaryLPA'] ?? 0} LPA",
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: jobTypes
+                  .map<Widget>((e) => buildChip(e.toString()))
+                  .toList(),
             ),
 
             const SizedBox(height: 20),
+            const Divider(),
+
+            /// Job Roles
+            const SizedBox(height: 18),
+            const Text(
+              "Job Role",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+
+            const SizedBox(height: 15),
+
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: jobRoles
+                  .map<Widget>((e) => buildChip(e.toString()))
+                  .toList(),
+            ),
+
+            const SizedBox(height: 20),
+            const Divider(),
+
+            /// Salary
+            const SizedBox(height: 18),
+
+            const Text(
+              "Expected Salary",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+
+            const SizedBox(height: 12),
+
+            Text(
+              "₹${career['minimumSalaryLPA'] ?? 0}-${career['maximumSalaryLPA'] ?? 0} LPA",
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w400),
+            ),
+
+            const SizedBox(height: 20),
+            const Divider(),
+
+            /// Preferred Location
+            const SizedBox(height: 18),
+
+            const Text(
+              "Preferred Locations",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+
+            const SizedBox(height: 15),
+
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                buildChip(career["preferredLocation"] ?? "-"),
+                ...states.map((e) => buildChip(e.toString())),
+              ],
+            ),
+
+            const SizedBox(height: 28),
 
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
+              height: 55,
+              child: OutlinedButton.icon(
                 onPressed: _showCareerDialog,
-                icon: const Icon(Icons.edit),
-                label: const Text("Edit"),
+                icon: const Icon(Icons.edit_outlined, color: Color(0xff4B5563)),
+                label: const Text(
+                  "Update Preferences",
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Color(0xff4B5563),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  side: const BorderSide(color: Color(0xffE5E7EB)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
               ),
             ),
           ],
@@ -3088,7 +4545,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
 
               InkWell(
-                onTap: _showHeaderDialog,
+                onTap: showPersonalDialog,
 
                 child: Container(
                   height: 45,
@@ -3108,7 +4565,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Row(
             children: [
               Expanded(
-                child: _infoItem(
+                child: infoItem(
                   Icons.location_on_outlined,
                   profile?['address']?['district'] ?? "Not Added",
                 ),
@@ -3118,22 +4575,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Container(
                 height: 50,
                 width: 1,
-                color: Colors.white.withOpacity(0.4),
+                color: Colors.white.withValues(alpha: 0.4),
               ),
 
               Expanded(
-                child: _infoItem(Icons.email_outlined, profile?['email'] ?? ""),
+                child: infoItem(Icons.email_outlined, profile?['email'] ?? ""),
               ),
               SizedBox(width: 10),
 
               Container(
                 height: 50,
                 width: 1,
-                color: Colors.white.withOpacity(0.4),
+                color: Colors.white.withValues(alpha: 0.4),
               ),
 
               Expanded(
-                child: _infoItem(
+                child: infoItem(
                   Icons.phone_android,
                   profile?['mobilenumber'] ?? "",
                 ),
@@ -3225,7 +4682,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
 
                     DropdownButtonFormField<String>(
-                      value: experienceLevel.isEmpty ? null : experienceLevel,
+                      initialValue: experienceLevel.isEmpty
+                          ? null
+                          : experienceLevel,
                       decoration: const InputDecoration(
                         labelText: "Experience Level",
                       ),
@@ -3360,23 +4819,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           );
         },
       ),
-    );
-  }
-
-  Widget _infoItem(IconData icon, String text) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: Colors.white),
-        const SizedBox(height: 8),
-        Text(
-          text,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: Colors.white, fontSize: 13),
-        ),
-      ],
     );
   }
 }

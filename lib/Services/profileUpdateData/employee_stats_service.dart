@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:zuperr/Models/SimilarJobs/EmployeStats/employee_stats_model.dart';
+import 'package:zuperr/Models/EmployeStats/employee_stats_model.dart';
 import 'package:zuperr/Utils/AppConstants.dart';
 
 
@@ -21,7 +21,7 @@ class EmployeeStatsService {
           "Content-Type": "application/json",
         },
       );
-
+print("Employee Stats Response: ${response.body}");
       if (response.statusCode == 200) {
         return EmployeeStatsModel.fromJson(
             jsonDecode(response.body));

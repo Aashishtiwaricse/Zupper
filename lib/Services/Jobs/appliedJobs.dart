@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:zuperr/Models/SimilarJobs/Jobs/AppliedJobs.dart';
+import 'package:zuperr/Models/Jobs/AppliedJobs.dart';
 import 'package:zuperr/Utils/AppConstants.dart';
 
 
@@ -20,7 +20,7 @@ class AppliedJobsService {
     final response = await http.post(
 
       Uri.parse(
-        "${ApiConstants.baseUrl}/api/employee/getuserappliedjobs",
+        "${ApiConstants.baseUrl}/auth/getuserappliedjobs",
       ),
 
       headers: {
@@ -30,6 +30,8 @@ class AppliedJobsService {
       },
 
     );
+
+    print(response.body);
 
     if(response.statusCode==200){
 

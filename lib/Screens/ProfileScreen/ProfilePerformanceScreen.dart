@@ -1,7 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:zuperr/Models/SimilarJobs/EmployeStats/employee_stats_model.dart';
-import 'package:zuperr/Screens/ProfileScreen/Widgets/widgets.dart';
+import 'package:zuperr/Models/EmployeStats/employee_stats_model.dart';
 import 'package:zuperr/Services/CandidatesData/candidates.dart';
 import 'package:zuperr/Services/profileUpdateData/employee_stats_service.dart';
 import 'package:zuperr/Services/profileUpdateData/updateProfile.dart';
@@ -278,7 +277,7 @@ class _ProfilePerformanceScreenState extends State<ProfilePerformanceScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
-                    value: tempExperience.isEmpty ? null : tempExperience,
+                    initialValue: tempExperience.isEmpty ? null : tempExperience,
                     decoration: const InputDecoration(
                       labelText: "Experience Level",
                     ),
@@ -381,6 +380,7 @@ class _ProfilePerformanceScreenState extends State<ProfilePerformanceScreen> {
     });
   }
 
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xffF5F5F5),
@@ -436,100 +436,7 @@ class _ProfilePerformanceScreenState extends State<ProfilePerformanceScreen> {
             // Completion Card
             _profileCompletionCard(),
 
-            _detailTile(
-              keyName: "experience",
-              title: "Add Experience",
-              subtitle: "Showcase your professional journey",
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  infoRow(
-                    "Experience Level",
-                    experienceLevel.isEmpty ? "Not Added" : experienceLevel,
-                  ),
-
-                  infoRow(
-                    "Min Experience",
-                    minExpController.text.isEmpty
-                        ? "-"
-                        : "${minExpController.text} Years",
-                  ),
-
-                  infoRow(
-                    "Max Experience",
-                    maxExpController.text.isEmpty
-                        ? "-"
-                        : "${maxExpController.text} Years",
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _showExperienceDialog,
-                      icon: const Icon(Icons.edit),
-                      label: const Text("Edit"),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            _detailTile(
-              keyName: "ctc",
-              title: "Add Current CTC",
-              subtitle: "Get relevant salary-matched opportunities",
-              child: Column(
-                children: [
-                  infoRow(
-                    "Minimum Salary",
-                    "₹${profile?['careerPreference']?['minimumSalaryLPA'] ?? '-'} LPA",
-                  ),
-
-                  infoRow(
-                    "Maximum Salary",
-                    "₹${profile?['careerPreference']?['maximumSalaryLPA'] ?? '-'} LPA",
-                  ),
-
-                  infoRow(
-                    "Preferred Location",
-                    profile?['careerPreference']?['preferredLocation'] ?? '-',
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  ElevatedButton.icon(
-                    onPressed: _showCTCDialog,
-                    icon: const Icon(Icons.edit),
-                    label: const Text("Edit"),
-                  ),
-                ],
-              ),
-            ),
-
-            _detailTile(
-              keyName: "noticePeriod",
-              title: "Add Notice Period",
-              subtitle: "Help recruiters understand your availability",
-              child: Column(
-                children: [
-                  infoRow(
-                    "Notice Period",
-                    profile?['noticePeriod'] ?? "Not Added",
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  ElevatedButton.icon(
-                    onPressed: _showNoticePeriodDialog,
-
-                    icon: const Icon(Icons.edit),
-                    label: const Text("Edit"),
-                  ),
-                ],
-              ),
-            ),
+      
 
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 20, 20, 10),

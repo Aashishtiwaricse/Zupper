@@ -1,17 +1,22 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zuperr/Screens/HomeScreen/CategorySelectorDialog/CategorySelectorDialog.dart';
+import 'package:zuperr/Screens/HomeScreen/HomeScreenWidgets/homeScreenJobsCard.dart';
 import 'package:zuperr/Screens/HomeScreen/SearchResultsScreen.dart';
-import 'package:zuperr/Screens/HomeScreen/allJobs.dart';
+import 'package:zuperr/Screens/HomeScreen/allJobs.dart' show AllJobsScreen;
 import 'package:zuperr/Screens/HomeScreen/categoryJobsScreen.dart';
 import 'package:zuperr/Screens/HomeScreen/filterDrawer.dart';
-import 'package:zuperr/Screens/HomeScreen/jobDetailsScreen.dart'
-    show JobDetailScreen;
 import 'package:zuperr/Screens/HomeScreen/notificationScreen.dart';
 import 'package:zuperr/Screens/ProfileScreen/userProfile.dart';
 import 'package:zuperr/Services/CandidatesData/candidates.dart';
+import 'package:zuperr/Services/Filter/filterService.dart';
 import 'package:zuperr/Services/RecommendedJobs/recommendedJobs.dart';
 import 'package:zuperr/Utils/AppConstants.dart';
+import 'package:zuperr/Utils/enums.dart';
 
 //Email: john.doe@example.com
 //Password: TestPass@123
@@ -23,10 +28,10 @@ class HomeScreen extends StatefulWidget {
   static const bg = Color(0xffF8F8F8);
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  HomeScreenState createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> {
   List<dynamic> recommendedJobs = [];
   List<dynamic> filteredJobs = [];
   bool isLoading = false;
@@ -34,21 +39,52 @@ class _HomeScreenState extends State<HomeScreen> {
   String? selectedCategory;
   final TextEditingController searchController = TextEditingController();
   bool isFilterApplied = false;
-bool isServiceSuspended = false;
+  bool isServiceSuspended = false;
+  List<String> selectedCategories = [];
+  List<dynamic> get displayJobs {
+    if (isFilterApplied) {
+      return filteredJobs;
+    }
+    return recommendedJobs;
+  }
 
   @override
   void initState() {
     super.initState();
-    loadRecommendedJobs();
-    loadCandidateData();
+    refreshData();
+  }
+
+  List<dynamic> get recommendedDisplayJobs {
+    List<dynamic> jobs = isFilterApplied ? filteredJobs : recommendedJobs;
+
+    if (selectedFilter == RecommendedFilter.all) {
+      return jobs;
+    }
+
+    return jobs.where((job) {
+      return selectedCategories.contains(job["jobCategory"]);
+    }).toList();
+  }
+
+  Future<void> refreshData() async {
+    await Future.wait([loadRecommendedJobs(), loadCandidateData()]);
   }
 
   Future<void> loadCandidateData() async {
     final data = await CandidateService.getCandidateData();
+    print('from home screen');
+
+    print(
+      selectedCategories = List<String>.from(data?["selectedJobCategories"]),
+    );
 
     if (mounted) {
       setState(() {
         candidateData = data;
+
+        selectedCategories = List<String>.from(
+          data?["selectedJobCategories"] ?? [],
+        );
       });
     }
   }
@@ -58,7 +94,9 @@ bool isServiceSuspended = false;
       isLoading = true;
     });
 
-    final jobs = await RecommendedJobsService.getRecommendedJobs();
+    final jobs = await RecommendedJobsService.getRecommendedJobs(context);
+    print("recommend jobs");
+    print(jobs);
 
     if (mounted) {
       setState(() {
@@ -72,12 +110,13 @@ bool isServiceSuspended = false;
 
   @override
   Widget build(BuildContext context) {
-   
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    final availableCardHeight = screenHeight * 0.68;
     return Scaffold(
       backgroundColor: bg,
       body: SingleChildScrollView(
-        child: 
-         Column(
+        child: Column(
           children: [
             Headersection(
               candidateData: candidateData,
@@ -89,103 +128,173 @@ bool isServiceSuspended = false;
                 });
               },
             ),
-             recommendedJobs.isEmpty 
+            recommendedJobs.isEmpty
+                ? _buildLoadingOrEmptyState()
+                : Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 30),
+                        const SectionTitle("Quick Access"),
+                        const SizedBox(height: 18),
+                        QuickAccessRow(
+                          jobs: recommendedJobs,
+                          selectedCategories: selectedCategories,
+                          onCategoryTap: (category) {
+                            setState(() {
+                              selectedCategory = category;
+                            });
+                          },
+                          onCategoriesChanged: () async {
+                            await loadCandidateData();
+                          },
+                        ),
+                        const SizedBox(height: 34),
+                        RecommendedHeader(jobs: recommendedDisplayJobs),
+                        const SizedBox(height: 15),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<RecommendedFilter>(
+                              isExpanded: true,
+                              value: selectedFilter,
+                              items: const [
+                                DropdownMenuItem(
+                                  value: RecommendedFilter.all,
+                                  child: Text("All Jobs"),
+                                ),
+                                DropdownMenuItem(
+                                  value: RecommendedFilter.selectedCategory,
+                                  child: Text("Selected Categories"),
+                                ),
+                              ],
+                              onChanged: (value) async {
+                                if (value == null) return;
 
-        ? _buildLoadingOrEmptyState()
-      :
-        
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 30),
-                  const SectionTitle("Quick Access"),
-                  const SizedBox(height: 18),
-                  QuickAccessRow(
-                    jobs: recommendedJobs,
-                    onCategoryTap: (category) {
-                      setState(() {
-                        selectedCategory = category;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 34),
-                  RecommendedHeader(jobs: recommendedJobs),
-                  const SizedBox(height: 22),
+                                setState(() {
+                                  selectedFilter = value;
+                                });
 
-                  if (isLoading)
-                    const Center(child: CircularProgressIndicator())
-                  else if (recommendedJobs.isNotEmpty)
-                    SizedBox(
-                      height: MediaQuery.of(context).size.height * 0.62,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: recommendedJobs.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 16),
-                        itemBuilder: (context, index) {
-                          return JobCard(job: recommendedJobs[index]);
-                        },
-                      ),
-                    ),
-                  const SizedBox(height: 30),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-  Widget _buildLoadingOrEmptyState() {
-  if (isLoading) {
-    return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.7,
-      child: const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-  }
+                                // Refresh immediately
+                                await refreshData();
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 15),
 
-  return SizedBox(
-    height: MediaQuery.of(context).size.height * 0.7,
+                       if (isLoading)
+  const Center(
+    child: CircularProgressIndicator(),
+  )
+else if (recommendedDisplayJobs.isEmpty)
+  SizedBox(
+    height: 300,
     child: Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.work_outline,
-            size: 80,
+            Icons.work_off_outlined,
+            size: 60,
             color: Colors.grey.shade400,
           ),
           const SizedBox(height: 12),
           Text(
-            "No Jobs Available",
+            selectedFilter == RecommendedFilter.all
+                ? "No Jobs Found"
+                : "No Category Jobs Found",
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: Colors.grey.shade700,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
-            "Pull down or tap refresh to try again",
+            selectedFilter == RecommendedFilter.all
+                ? "There are no jobs available right now."
+                : "No jobs are available in your selected categories.",
+            textAlign: TextAlign.center,
             style: TextStyle(
+              fontSize: 14,
               color: Colors.grey.shade500,
             ),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: loadRecommendedJobs,
-            icon: const Icon(Icons.refresh),
-            label: const Text("Refresh"),
           ),
         ],
       ),
     ),
-  );
-}
+  )
+else
+  SizedBox(
+    height: availableCardHeight,
+    child: ListView.separated(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: recommendedDisplayJobs.length,
+      separatorBuilder: (_, _) => const SizedBox(width: 16),
+      itemBuilder: (context, index) {
+        return JobCard(
+          job: recommendedDisplayJobs[index],
+        );
+      },
+    ),
+  ),
+                        const SizedBox(height: 50),
+                      ],
+                    ),
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingOrEmptyState() {
+    if (isLoading) {
+      return SizedBox(
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.7,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.work_outline, size: 80, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            Text(
+              "No Jobs Available",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Pull down or tap refresh to try again",
+              style: TextStyle(color: Colors.grey.shade500),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: loadRecommendedJobs,
+              icon: const Icon(Icons.refresh),
+              label: const Text("Refresh"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class Headersection extends StatefulWidget {
@@ -234,8 +343,113 @@ class _HeadersectionState extends State<Headersection> {
     }
   }
 
+  String currentLocation = "";
+  bool isGettingLocation = false;
+  Future<void> getCurrentLocation() async {
+    setState(() {
+      isGettingLocation = true;
+    });
+
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+    if (!serviceEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enable location services")),
+      );
+
+      setState(() {
+        isGettingLocation = false;
+      });
+
+      return;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Location permission denied")),
+      );
+
+      setState(() {
+        isGettingLocation = false;
+      });
+
+      return;
+    }
+
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+
+    List<Placemark> placemarks = await placemarkFromCoordinates(
+      position.latitude,
+      position.longitude,
+    );
+
+    if (placemarks.isNotEmpty) {
+      final place = placemarks.first;
+
+      final location =
+          "${place.locality ?? place.subAdministrativeArea ?? ""}, ${place.administrativeArea ?? ""}";
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString("current_location", location);
+      await prefs.setString("current_location", location);
+      await prefs.setDouble("latitude", position.latitude);
+      await prefs.setDouble("longitude", position.longitude);
+
+      setState(() {
+        currentLocation = location;
+        isGettingLocation = false;
+      });
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedLocation();
+  }
+
+  Future<void> _loadSavedLocation() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final savedLocation = prefs.getString("current_location");
+
+    if (savedLocation != null && savedLocation.isNotEmpty) {
+      setState(() {
+        currentLocation = savedLocation;
+      });
+    } else {
+      // If nothing is saved, fetch from GPS
+      getCurrentLocation();
+    }
+  }
+
+  String buildFilterSearchText(Map<String, Set<String>> selectedFilters) {
+    final List<String> values = [];
+
+    for (final entry in selectedFilters.entries) {
+      for (final value in entry.value) {
+        if (value.trim().isNotEmpty) {
+          values.add(value.trim());
+        }
+      }
+    }
+
+    return values.join(" ");
+  }
+
   @override
   Widget build(BuildContext context) {
+    final String? profileImage = widget.candidateData?['profilePicture'];
+
     return Container(
       // height: 430,
       padding: const EdgeInsets.only(top: 60, left: 24, right: 24),
@@ -263,9 +477,7 @@ class _HeadersectionState extends State<Headersection> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const NotificationScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => NotificationScreen()),
                   );
                 },
                 child: Container(
@@ -291,15 +503,22 @@ class _HeadersectionState extends State<Headersection> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          ProfileScreen(candidateData: widget.candidateData),
+                    ),
                   );
                 },
                 child: CircleAvatar(
                   radius: 26,
+                  backgroundColor: Colors.grey.shade200,
                   backgroundImage:
-                      widget.candidateData?['profilePicture'] != null
-                      ? NetworkImage(widget.candidateData!['profilePicture'])
-                      : const AssetImage("assets/profile.png") as ImageProvider,
+                      (profileImage != null && profileImage.isNotEmpty)
+                      ? NetworkImage(profileImage)
+                      : null,
+                  child: (profileImage == null || profileImage.isEmpty)
+                      ? const Icon(Icons.person, size: 30, color: Colors.grey)
+                      : null,
                 ),
               ),
               const SizedBox(width: 18),
@@ -315,24 +534,48 @@ class _HeadersectionState extends State<Headersection> {
                     ),
                   ),
                   SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.location_on_outlined,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                      SizedBox(width: 4),
-                      Text(
-                        "${widget.candidateData?['address']?['district'] ?? ''}"
-                        "${widget.candidateData?['address']?['state'] != null ? ', ${widget.candidateData!['address']['state']}' : ''}",
-                        style: const TextStyle(
+                  GestureDetector(
+                    onTap: getCurrentLocation,
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.location_on_outlined,
                           color: Colors.white,
-                          fontSize: 17,
+                          size: 18,
                         ),
-                      ),
-                      Icon(Icons.keyboard_arrow_down, color: Colors.white),
-                    ],
+                        const SizedBox(width: 4),
+
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width * 0.5,
+                          child: Text(
+                            currentLocation.isNotEmpty
+                                ? currentLocation
+                                : "${widget.candidateData?['address']?['district'] ?? ''}"
+                                      "${widget.candidateData?['address']?['state'] != null ? ', ${widget.candidateData!['address']['state']}' : ''}",
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                            ),
+                          ),
+                        ),
+
+                        if (isGettingLocation)
+                          const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        else
+                          const Icon(
+                            Icons.keyboard_arrow_down,
+                            color: Colors.white,
+                          ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -346,7 +589,7 @@ class _HeadersectionState extends State<Headersection> {
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.blue.withOpacity(.18),
+                  color: Colors.blue.withValues(alpha: .18),
                   blurRadius: 22,
                   offset: const Offset(0, 12),
                 ),
@@ -354,7 +597,7 @@ class _HeadersectionState extends State<Headersection> {
             ),
             child: Row(
               children: [
-                const SizedBox(width: 20),
+                const SizedBox(width: 10),
                 const Icon(Icons.search, color: Colors.grey, size: 30),
                 const SizedBox(width: 14),
                 Expanded(
@@ -374,25 +617,59 @@ class _HeadersectionState extends State<Headersection> {
                   ),
                 ),
                 GestureDetector(
-                  onTap: () {
-                    FilterDrawer.show(context, widget.recommendedJobs, (
-                      List<dynamic> jobs,
-                    ) {
-                      widget.onFilterApplied(jobs);
-                    });
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.all(10),
+               onTap: () {
+    FilterDrawer.show(
+      context,
+      (selectedFilters) async {
+        try {
+          debugPrint("================================");
+          debugPrint("FILTERS SELECTED FROM DRAWER:");
+          debugPrint(selectedFilters.toString());
+          debugPrint("================================");
+
+          if (selectedFilters.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Please select at least one filter"),
+              ),
+            );
+            return;
+          }
+
+          final jobs = await FilterService.searchJobsByFilters(
+            selectedFilters,
+          );
+
+          if (!mounted) return;
+
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SearchResultsScreen(
+                searchText: "",
+                jobs: jobs,
+              ),
+            ),
+          );
+        } catch (e) {
+          if (!mounted) return;
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Failed to search jobs: $e"),
+            ),
+          );
+        }
+      },
+    );
+  },
+                  child: Image.asset(
+                    'assets/filter.png',
                     width: 60,
-                    decoration: BoxDecoration(
-                      color: HomeScreen.blue,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: const Icon(
-                      Icons.tune,
-                      color: Colors.white,
-                      size: 25,
-                    ),
+                    height: 35,
+
+                    //color: HomeScreen.blue,
+                    fit: BoxFit.contain,
                   ),
                 ),
               ],
@@ -403,7 +680,6 @@ class _HeadersectionState extends State<Headersection> {
       ),
     );
   }
-  
 }
 
 class SectionTitle extends StatelessWidget {
@@ -419,58 +695,141 @@ class SectionTitle extends StatelessWidget {
   }
 }
 
-class QuickAccessRow extends StatelessWidget {
+// Create in Part 2
+
+class QuickAccessRow extends StatefulWidget {
   final List<dynamic> jobs;
   final Function(String) onCategoryTap;
-
+  final List<String> selectedCategories;
+  final Future<void> Function() onCategoriesChanged;
   const QuickAccessRow({
     super.key,
     required this.jobs,
+    required this.selectedCategories,
     required this.onCategoryTap,
+    required this.onCategoriesChanged,
   });
+  @override
+  State<QuickAccessRow> createState() => _QuickAccessRowState();
+}
+
+class _QuickAccessRowState extends State<QuickAccessRow> {
+  Future<void> _openCategorySelector() async {
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (_) =>
+          CategorySelectorDialog(selectedCategories: widget.selectedCategories),
+    );
+
+    if (result != null) {
+      await widget.onCategoriesChanged();
+    }
+  }
+
+  List<Color> quickCardColors = [
+    Color(0xFF2F80ED), // Blue
+    Color(0xFFF2994A), // Orange
+    Color(0xFFEB5757), // Red
+    Color(0xFF27AE60), // Green
+    Color(0xFF9B51E0), // Purple
+    Color(0xFF00B8D9), // Cyan
+    Color(0xFFFF6F61), // Coral
+    Color(0xFF6C63FF), // Indigo
+    Color(0xFFFFC107), // Amber
+    Color(0xFF26A69A), // Teal
+  ];
+  @override
+  Widget build(BuildContext context) {
+    final Map<String, int> counts = {};
+
+    for (var job in widget.jobs) {
+      final category = job["jobCategory"] ?? "Other";
+
+      if (widget.selectedCategories.contains(category)) {
+        counts[category] = (counts[category] ?? 0) + 1;
+      }
+    }
+
+    final entries = widget.selectedCategories.map((category) {
+      return MapEntry(category, counts[category] ?? 0);
+    }).toList();
+
+    return SizedBox(
+      height: 80,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: entries.length + 1,
+        itemBuilder: (context, index) {
+          if (index == entries.length) {
+            return Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: _EditCategoryCard(onTap: _openCategorySelector),
+            );
+          }
+
+          final entry = entries[index];
+
+          final categoryJobs = widget.jobs.where((job) {
+            return job["jobCategory"] == entry.key;
+          }).toList();
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: QuickCard(
+              title: entry.key,
+              color: quickCardColors[index % quickCardColors.length],
+              count: entry.value,
+              onTap: () {
+                widget.onCategoryTap(entry.key);
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CategoryJobsScreen(
+                      title: entry.key,
+                      jobs: categoryJobs,
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+///
+/// Edit Card
+///
+class _EditCategoryCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _EditCategoryCard({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    Map<String, int> categoryCounts = {};
-
-    for (var job in jobs) {
-      final category = job['jobCategory']?.toString() ?? 'Other';
-      categoryCounts[category] = (categoryCounts[category] ?? 0) + 1;
-    }
-
-    final categories = categoryCounts.entries.toList();
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: categories.map((entry) {
-          return Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: GestureDetector(
-              onTap: () => onCategoryTap(entry.key),
-              child: QuickCard(
-                entry.key,
-                Colors.blue,
-                entry.value,
-                onTap: () {
-                  final categoryJobs = jobs.where((job) {
-                    return job['jobCategory'] == entry.key;
-                  }).toList();
-
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CategoryJobsScreen(
-                        title: entry.key,
-                        jobs: categoryJobs,
-                      ),
-                    ),
-                  );
-                },
-              ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 110,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          color: Colors.white,
+          border: Border.all(color: Colors.blue, width: 1.5),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(Icons.edit, size: 22, color: Colors.blue),
+            SizedBox(height: 8),
+            Text(
+              "Edit Categories",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
             ),
-          );
-        }).toList(),
+          ],
+        ),
       ),
     );
   }
@@ -482,43 +841,85 @@ class QuickCard extends StatelessWidget {
   final int count;
   final VoidCallback onTap;
 
-  const QuickCard(
-    this.title,
-    this.color,
-    this.count, {
+  const QuickCard({
     super.key,
+    required this.title,
+    required this.color,
+    required this.count,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Ink(
+          width: 165,
+          height: 80,
+          decoration: BoxDecoration(
+            color: color.withOpacity(.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withOpacity(.18), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(.12),
+                blurRadius: 14,
+                offset: const Offset(3, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Container(
+                height: 6,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(16),
+                  ),
+                ),
+              ),
 
-      child: Container(
-        width: 120,
-        height: 90,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border(top: BorderSide(color: color, width: 5)),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              "$count Jobs",
-              style: const TextStyle(color: Colors.grey, fontSize: 16),
-            ),
-          ],
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 14,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xff111111),
+                          height: 1.1,
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      Text(
+                        "$count Jobs",
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -567,340 +968,4 @@ class RecommendedHeader extends StatelessWidget {
       ],
     );
   }
-}
-
-// Jobbs card
-
-class JobCard extends StatelessWidget {
-  final dynamic job;
-
-  const JobCard({super.key, required this.job});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: MediaQuery.of(context).size.width * 0.82,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xffDCE7FF), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xff2563EB).withOpacity(0.08),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Blue top accent bar
-          Container(
-            height: 4,
-            decoration: const BoxDecoration(
-              color: Color(0xff2563EB),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-          ),
-
-          // Header section
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-            child: Column(
-              children: [
-                // Logo + Bookmark row
-                Padding(
-                  padding: const EdgeInsets.only(left: 100),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 88,
-                        height: 88,
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text(
-                                'a',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 44,
-                                  fontWeight: FontWeight.bold,
-                                  fontFamily: 'serif',
-                                  height: 1.1,
-                                ),
-                              ),
-                              // Amazon smile arrow
-                              CustomPaint(
-                                size: const Size(42, 8),
-                                painter: _SmilePainter(),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 50),
-                      // Bookmark icon top-right
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 60),
-                        child: const Icon(
-                          Icons.bookmark_border_rounded,
-                          color: Colors.black54,
-                          size: 30,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // Job title
-                Text(
-                  job['title'] ?? '',
-
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xff0F172A),
-                    letterSpacing: -0.3,
-                  ),
-                ),
-
-                const SizedBox(height: 8),
-
-                // Company & salary
-                Text(
-                  job['companyName'] ?? '',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Color(0xff64748B),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Location & experience row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _InfoChip(
-                      icon: Icons.location_on_outlined,
-                      label: job['location'] ?? '',
-                      iconColor: const Color(0xff2563EB),
-                    ),
-                    const SizedBox(width: 20),
-                    _InfoChip(
-                      icon: Icons.work_outline_rounded,
-                      label:
-                          "${job['minimumExperienceInYears']}-${job['maximumExperienceInYears']} Years",
-                      iconColor: const Color(0xff2563EB),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-              ],
-            ),
-          ),
-
-          // Dashed divider
-          _DashedDivider(color: const Color(0xffDCE7FF)),
-
-          // Skills section
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              alignment: WrapAlignment.center,
-              children:
-                  (job['skillDetails'] != null &&
-                      (job['skillDetails'] as List).isNotEmpty)
-                  ? (job['skillDetails'] as List)
-                        .map<Widget>(
-                          (skill) => _SkillChip(
-                            label: skill['Name']?.toString() ?? '',
-                          ),
-                        )
-                        .toList()
-                  : [const _SkillChip(label: 'No Skills')],
-            ),
-          ),
-
-          // Dashed divider
-          _DashedDivider(color: const Color(0xffDCE7FF)),
-
-          // Apply button
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => JobDetailScreen(job: job),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xff2563EB),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                child: const Text(
-                  'Apply',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Info chip (location / experience) ────────────────────────────────────────
-class _InfoChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color iconColor;
-
-  const _InfoChip({
-    required this.icon,
-    required this.label,
-    required this.iconColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 17, color: iconColor),
-        const SizedBox(width: 5),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 14,
-            color: Color(0xff475569),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ── Skill pill chip ───────────────────────────────────────────────────────────
-class _SkillChip extends StatelessWidget {
-  final String label;
-  const _SkillChip({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(50),
-        border: Border.all(color: const Color(0xffDCE7FF), width: 1.2),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 13,
-          color: Color(0xff475569),
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
-  }
-}
-
-// ── Dashed divider ────────────────────────────────────────────────────────────
-class _DashedDivider extends StatelessWidget {
-  final Color color;
-  const _DashedDivider({required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      size: const Size(double.infinity, 1),
-      painter: _DashedLinePainter(color: color),
-    );
-  }
-}
-
-class _DashedLinePainter extends CustomPainter {
-  final Color color;
-  const _DashedLinePainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1;
-
-    double x = 0;
-    const dashWidth = 6.0;
-    const dashSpace = 4.0;
-
-    while (x < size.width) {
-      canvas.drawLine(Offset(x, 0), Offset(x + dashWidth, 0), paint);
-      x += dashWidth + dashSpace;
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashedLinePainter old) => old.color != color;
-}
-
-// ── Amazon smile arrow painter ────────────────────────────────────────────────
-class _SmilePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xffFF9900)
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final path = Path();
-    path.moveTo(2, 2);
-    path.quadraticBezierTo(size.width / 2, size.height + 4, size.width - 2, 2);
-
-    canvas.drawPath(path, paint);
-
-    // Arrow tip
-    final arrowPaint = Paint()
-      ..color = const Color(0xffFF9900)
-      ..strokeWidth = 2.5
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(
-      Offset(size.width - 2, 2),
-      Offset(size.width - 6, 5),
-      arrowPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_SmilePainter old) => false;
 }

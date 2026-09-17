@@ -1,179 +1,391 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:zuperr/Screens/HomeScreen/Widgets/notification_tile.dart';
+
+import '../../Controllers/Notification/notification_controller.dart';
+
 
 class NotificationScreen extends StatelessWidget {
-  const NotificationScreen({super.key});
+
+  NotificationScreen({super.key});
+
+
+  final NotificationController controller =
+      Get.find<NotificationController>();
+
 
   static const blue = Color(0xff1E6BE3);
   static const bg = Color(0xffF5F5F5);
 
+
   @override
   Widget build(BuildContext context) {
+
     return Scaffold(
+
       backgroundColor: bg,
+
+
       body: Column(
+
         children: [
-          /// HEADER
-          Container(
-            height: 135,
-            width: double.infinity,
-            padding: const EdgeInsets.only(
-              top: 58,
-              left: 20,
-              right: 20,
-            ),
-            decoration: const BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage("assets/Head.png"),
-                fit: BoxFit.cover,
-              ),
-            ),
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    height: 38,
-                    width: 38,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.arrow_back_ios_new,
-                      color: Colors.white,
-                      size: 14,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 18),
-                const Text(
-                  "Notifications",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                  ),
-                )
-              ],
-            ),
-          ),
+
+
+          _header(),
+
 
           Expanded(
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              itemCount: 8,
-              separatorBuilder: (_, __) => const Divider(
-                height: 1,
-                color: Color(0xffEEEEEE),
-              ),
-              itemBuilder: (context, index) {
-                return const NotificationTile();
-              },
-            ),
+
+            child: Obx(() {
+
+
+              if(controller.notifications.isEmpty){
+
+                return _emptyState();
+
+              }
+
+
+              return RefreshIndicator(
+
+                onRefresh: () async {
+
+                  controller.loadNotifications();
+
+                },
+
+
+                child: ListView.separated(
+
+                  padding: EdgeInsets.zero,
+
+
+                  itemCount:
+                      controller.notifications.length,
+
+
+                  separatorBuilder: (_,__)=> const Divider(
+                    height:1,
+                    color: Color(0xffEEEEEE),
+                  ),
+
+
+                  itemBuilder:(context,index){
+
+
+                    final notification =
+                        controller.notifications[index];
+
+
+                    return Dismissible(
+
+                      key: Key(
+                        notification.id,
+                      ),
+
+
+                      direction:
+                      DismissDirection.endToStart,
+
+
+                      background: Container(
+
+                        alignment:
+                        Alignment.centerRight,
+
+
+                        padding:
+                        const EdgeInsets.only(
+                          right:25,
+                        ),
+
+
+                        color:
+                        Colors.red,
+
+
+                        child:
+                        const Icon(
+                          Icons.delete,
+                          color:Colors.white,
+                        ),
+
+                      ),
+
+
+
+                      onDismissed:(_){
+
+                        controller.deleteNotification(
+                          notification,
+                        );
+
+                      },
+
+
+                      child:
+                      NotificationTile(
+                        notification:
+                        notification,
+                      ),
+
+                    );
+
+                  },
+
+
+                ),
+
+              );
+
+            }),
+
           )
+
         ],
+
       ),
+
     );
+
   }
-}
 
-class NotificationTile extends StatelessWidget {
-  const NotificationTile({super.key});
 
-  @override
-  Widget build(BuildContext context) {
+
+
+
+  Widget _header(){
+
+
     return Container(
-      color: indexColor(),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 20,
-        vertical: 28,
+
+      height:135,
+
+      width:double.infinity,
+
+
+      padding:
+      const EdgeInsets.only(
+        top:58,
+        left:20,
+        right:20,
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          /// unread dot
-          // Container(
-          //   margin: const EdgeInsets.only(top: 18),
-          //   height: 14,
-          //   width: 14,
-          //   decoration: const BoxDecoration(
-          //     color: Color(0xff1954A6),
-          //     shape: BoxShape.circle,
-          //   ),
-          // ),
 
-          // const SizedBox(width: 18),
 
-          /// avatar
-          Container(
-           // height: 22,
-           // width: 22,
-            decoration: BoxDecoration(
-              color: const Color(0xff1954A6),
-              borderRadius: BorderRadius.circular(13),
-            ),
-            child: const Center(
-              child: Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Text(
-                  "AB",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
+      decoration:
+      const BoxDecoration(
+
+        image:
+        DecorationImage(
+
+          image:
+          AssetImage(
+            "assets/Head.png",
           ),
 
-          const SizedBox(width: 18),
+          fit:
+          BoxFit.cover,
 
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Naukri Minis",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xff6A6E76),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      "15h",
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Color(0xff6A6E76),
-                      ),
-                    )
-                  ],
-                ),
+        ),
 
-                SizedBox(height: 12),
-
-                Text(
-                  "IT Employees’ unions accuse TCS of rights violation after retrenching 6,000 of its staff",
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.35,
-                    color: Color(0xff414651),
-                    fontWeight: FontWeight.w400,
-                  ),
-                )
-              ],
-            ),
-          )
-        ],
       ),
+
+
+
+      child:Row(
+
+        children:[
+
+
+          GestureDetector(
+
+            onTap:(){
+
+              Get.back();
+
+            },
+
+
+            child:Container(
+
+              height:38,
+
+              width:38,
+
+
+              decoration:
+              BoxDecoration(
+
+                color:
+                Colors.white24,
+
+
+                borderRadius:
+                BorderRadius.circular(12),
+
+              ),
+
+
+              child:
+              const Icon(
+
+                Icons.arrow_back_ios_new,
+
+                color:
+                Colors.white,
+
+                size:14,
+
+              ),
+
+            ),
+
+          ),
+
+
+          const SizedBox(
+            width:18,
+          ),
+
+
+          const Expanded(
+
+            child:Text(
+
+              "Notifications",
+
+              style:
+              TextStyle(
+
+                color:
+                Colors.white,
+
+                fontSize:24,
+
+                fontWeight:
+                FontWeight.w700,
+
+              ),
+
+            ),
+
+          ),
+
+
+
+          GestureDetector(
+
+            onTap:(){
+
+              controller.clearAll();
+
+            },
+
+
+            child:
+            const Text(
+
+              "Clear All",
+
+              style:
+              TextStyle(
+
+                color:
+                Colors.white,
+
+                fontWeight:
+                FontWeight.w600,
+
+              ),
+
+            ),
+
+          )
+
+
+        ],
+
+      ),
+
     );
+
   }
 
-  Color indexColor() {
-    return const Color(0xffF8F8F8);
+
+
+
+
+  Widget _emptyState(){
+
+
+    return const Center(
+
+      child:Column(
+
+        mainAxisSize:
+        MainAxisSize.min,
+
+
+        children:[
+
+
+          Icon(
+
+            Icons.notifications_none,
+
+            size:70,
+
+            color:
+            Colors.grey,
+
+          ),
+
+
+          SizedBox(
+            height:15,
+          ),
+
+
+          Text(
+
+            "No Notifications Yet",
+
+            style:
+            TextStyle(
+
+              fontSize:18,
+
+              fontWeight:
+              FontWeight.w600,
+
+            ),
+
+          ),
+
+
+          SizedBox(
+            height:8,
+          ),
+
+
+          Text(
+
+            "We'll notify you when something arrives",
+
+            style:
+            TextStyle(
+              color:Colors.grey,
+            ),
+
+          )
+
+        ],
+
+      ),
+
+    );
+
   }
+
 }

@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 
 class DynamicFilterSection extends StatefulWidget {
   final String title;
-  final List<String> values;
+  final List values;
+  final Set<String> selectedValues;
   final Function(Set<String>) onChanged;
 
-
   const DynamicFilterSection({
+    super.key,
     required this.title,
     required this.values,
+    required this.selectedValues,
     required this.onChanged,
-
   });
 
   @override
@@ -18,10 +19,27 @@ class DynamicFilterSection extends StatefulWidget {
       _DynamicFilterSectionState();
 }
 
-class _DynamicFilterSectionState
-    extends State<DynamicFilterSection> {
+class _DynamicFilterSectionState extends State<DynamicFilterSection> {
   bool expanded = false;
-  final Map<String, bool> selected = {};
+
+  late Set<String> selected;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Load previously selected filters
+    selected = Set<String>.from(widget.selectedValues);
+  }
+
+  @override
+  void didUpdateWidget(covariant DynamicFilterSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.selectedValues != widget.selectedValues) {
+      selected = Set<String>.from(widget.selectedValues);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,8 +59,8 @@ class _DynamicFilterSectionState
                 Text(
                   widget.title,
                   style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 Icon(
@@ -54,21 +72,42 @@ class _DynamicFilterSectionState
             ),
           ),
         ),
+
         if (expanded)
           ...widget.values.map(
-            (item) => CheckboxListTile(
-              value: selected[item] ?? false,
-              onChanged: (value) {
-                setState(() {
-                  selected[item] = value ?? false;
-                });
-              },
-              title: Text(item),
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-            ),
+            (item) {
+              final String itemValue = item.toString();
+
+              return CheckboxListTile(
+                value: selected.contains(itemValue),
+
+                onChanged: (value) {
+                  setState(() {
+                    if (value == true) {
+                      selected.add(itemValue);
+                    } else {
+                      selected.remove(itemValue);
+                    }
+                  });
+
+                  // Send updated selection to FilterDrawer
+                  widget.onChanged(
+                    Set<String>.from(selected),
+                  );
+                },
+
+                title: Text(itemValue),
+
+                controlAffinity:
+                    ListTileControlAffinity.leading,
+
+                contentPadding: EdgeInsets.zero,
+
+                dense: true,
+              );
+            },
           ),
+
         const SizedBox(height: 12),
       ],
     );

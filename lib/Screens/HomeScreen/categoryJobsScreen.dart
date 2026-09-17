@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:zuperr/Screens/HomeScreen/HomeScreen.dart';
+import 'package:zuperr/Screens/HomeScreen/HomeScrrenJobCards.dart';
 
 class CategoryJobsScreen extends StatelessWidget {
   final String title;

@@ -32,7 +32,7 @@ class SettingsScreen extends StatelessWidget {
                       height: 44,
                       width: 44,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(.12),
+                        color: Colors.white.withValues(alpha: .12),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(

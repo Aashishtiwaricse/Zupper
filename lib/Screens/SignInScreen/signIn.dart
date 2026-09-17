@@ -1,5 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zuperr/Models/SavedAccount/savedAccount.dart';
 import 'package:zuperr/Screens/HomeMain/homeMain.dart';
+import 'package:zuperr/Screens/HomeScreen/jobDetailsScreen.dart';
+import 'package:zuperr/Screens/SignInScreen/Widget/savedAccounts.dart';
+import 'package:zuperr/Screens/SignInScreen/forgotPass.dart';
+import 'package:zuperr/Screens/SignInScreen/reactivateAccount.dart';
+import 'package:zuperr/Screens/SignInScreen/signInOtpVerify.dart';
+import 'package:zuperr/Services/GoogleAuthService.dart/googleAuth.dart';
+import 'package:zuperr/Services/PublicJobService/PublicJobService.dart';
 import 'package:zuperr/Services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -14,16 +25,34 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  bool _rememberMe = false;
+  bool _rememberMe = true;
   bool _isLoading = false;
-final AuthService _authService = AuthService();
+  final AuthService _authService = AuthService();
   bool _isButtonEnabled = false;
+
+  final GoogleAuthService googleAuthService = GoogleAuthService();
+  final GoogleAuthService _googleAuthService = GoogleAuthService();
+  List<SavedAccount> accounts = [];
+
+  Future<void> loadAccounts() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final list = prefs.getStringList("saved_accounts") ?? [];
+
+    accounts = list.map((e) => SavedAccount.fromJson(jsonDecode(e))).toList();
+
+    setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
 
     _emailController.addListener(_validateInputs);
     _passwordController.addListener(_validateInputs);
+    _loadRememberMe();
+    loadAccounts();
+   
   }
 
   void _validateInputs() {
@@ -36,6 +65,98 @@ final AuthService _authService = AuthService();
       _isButtonEnabled = isValidEmail && password.length >= 6;
     });
   }
+
+  Future<void> _loadRememberMe() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final remember = prefs.getBool("remember_me") ?? false;
+
+    if (remember) {
+      _emailController.text = prefs.getString("saved_email") ?? "";
+      _passwordController.text = prefs.getString("saved_password") ?? "";
+    }
+
+    setState(() {
+      _rememberMe = remember;
+    });
+
+    _validateInputs();
+  }
+
+  
+  Future<void> _handlePostLoginNavigation() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  final pendingJobId =
+      prefs.getString("pending_job_id");
+
+  // =========================================================
+  // NORMAL LOGIN
+  // =========================================================
+
+  if (pendingJobId == null || pendingJobId.isEmpty) {
+    if (!mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const MainScreen(),
+      ),
+      (route) => false,
+    );
+
+    return;
+  }
+
+  print("======================================");
+  print("PENDING JOB FOUND AFTER LOGIN");
+  print("JOB ID: $pendingJobId");
+  print("======================================");
+
+  // Remove first
+  await prefs.remove("pending_job_id");
+
+  // Fetch job
+  final job =
+      await PublicJobService.getJob(pendingJobId);
+
+  if (!mounted) return;
+
+  if (job != null) {
+
+    print("Opening pending job");
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => JobDetailScreen(
+          job: job,
+        ),
+      ),
+      (route) => false,
+    );
+
+  } else {
+
+    print("Unable to load pending job");
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const MainScreen(),
+      ),
+      (route) => false,
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          "Unable to load the job. Please try again.",
+        ),
+      ),
+    );
+  }
+}
 
 Future<void> loginApi() async {
   try {
@@ -51,6 +172,7 @@ Future<void> loginApi() async {
     final response = await _authService.signIn(
       email: _emailController.text.trim(),
       password: _passwordController.text.trim(),
+      rememberMe: _rememberMe,
     );
 
     print("LOGIN RESPONSE:");
@@ -58,21 +180,58 @@ Future<void> loginApi() async {
 
     if (!mounted) return;
 
+    // =========================================================
+    // TWO FACTOR AUTHENTICATION
+    // =========================================================
+
+    if (response["requiresTwoFactor"] == true) {
+      final String challengeToken =
+          response["challengeToken"]?.toString() ?? "";
+
+      if (challengeToken.isEmpty) {
+        throw Exception(
+          "Challenge token not received from server",
+        );
+      }
+
+      print("2FA REQUIRED");
+      print("Challenge Token received");
+
+      // DO NOT SAVE TOKEN
+      // Pass it directly to OTP screen
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => VerifyOtpScreen(
+            email: _emailController.text.trim(),
+            challengeToken: challengeToken,
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    // =========================================================
+    // NORMAL LOGIN
+    // =========================================================
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(response["message"]),
+        content: Text(
+          response["message"] ?? "Login successful",
+        ),
         backgroundColor: Colors.green,
       ),
     );
+    await _handlePostLoginNavigation();
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const MainScreen(),
-      ),
-    );
+   
   } catch (e) {
     print("LOGIN ERROR: $e");
+
+    if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -90,8 +249,6 @@ Future<void> loginApi() async {
     }
   }
 }
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -226,11 +383,22 @@ Future<void> loginApi() async {
                                     const Text("Remember me"),
                                   ],
                                 ),
-                                const Text(
-                                  "Forgot Password ?",
-                                  style: TextStyle(
-                                    color: Colors.blue,
-                                    fontWeight: FontWeight.w500,
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const ForgotPasswordScreen(),
+                                      ),
+                                    );
+                                  },
+                                  child: const Text(
+                                    "Forgot Password?",
+                                    style: TextStyle(
+                                      color: Colors.blue,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -240,15 +408,15 @@ Future<void> loginApi() async {
 
                             /// Login Button
                             GestureDetector(
-                             onTap: () {
-  if (_isLoading) return;
+                              onTap: () {
+                                if (_isLoading) return;
 
-  if (!_formKey.currentState!.validate()) {
-    return;
-  }
+                                if (!_formKey.currentState!.validate()) {
+                                  return;
+                                }
 
-  loginApi();
-},
+                                loginApi();
+                              },
                               child: Container(
                                 width: double.infinity,
                                 padding: const EdgeInsets.symmetric(
@@ -257,7 +425,7 @@ Future<void> loginApi() async {
                                 decoration: BoxDecoration(
                                   color: (_isButtonEnabled && !_isLoading)
                                       ? Colors.blue
-                                      : Colors.blue.withOpacity(0.4),
+                                      : Colors.blue.withValues(alpha: 0.4),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 alignment: Alignment.center,
@@ -284,7 +452,10 @@ Future<void> loginApi() async {
 
                             /// Sign up
                             GestureDetector(
-                              onTap: () =>   Navigator.pushReplacementNamed(context, '/signup'),
+                              onTap: () => Navigator.pushReplacementNamed(
+                                context,
+                                '/signup',
+                              ),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: const [
@@ -301,6 +472,28 @@ Future<void> loginApi() async {
                             ),
 
                             const SizedBox(height: 16),
+                            const SizedBox(height: 12),
+
+                            Center(
+                              child: TextButton(
+                                onPressed: () {
+                                  showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    backgroundColor: Colors.transparent,
+                                    builder: (_) =>
+                                        const ReactivateAccountBottomSheet(),
+                                  );
+                                },
+                                child: const Text(
+                                  "Reactivate Account",
+                                  style: TextStyle(
+                                    color: Colors.blue,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
 
                             /// Divider
                             Row(
@@ -317,31 +510,38 @@ Future<void> loginApi() async {
                             const SizedBox(height: 16),
 
                             /// Google Button
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(color: Colors.grey.shade300),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  SizedBox(
-                                    height: 15,
-                                    width: 15,
-                                    child: Image.asset("assets/google.png"),
-                                  ),
-                                  SizedBox(width: 10),
-                                  Text(
-                                    "Continue with Google",
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
+                            Center(
+                              child: ElevatedButton.icon(
+                                icon: Image.asset(
+                                  "assets/google.png",
+                                  height: 22,
+                                ),
+                                label: const Text("Continue with Google"),
+                                onPressed: () async {
+                                  if (_rememberMe) {
+                                    await saveRememberedAccount(
+                                      _emailController.text.trim(),
+                                      _passwordController.text.trim(),
+                                    );
+                                  }
+                                  try {
+                                    final response = await _googleAuthService
+                                        .signInWithGoogle();
+
+                                    print("SUCCESS RESPONSE: $response");
+
+                                    Navigator.pushAndRemoveUntil(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const MainScreen(),
+                                      ),
+                                      (route) => false,
+                                    );
+                                  } catch (e, s) {
+                                    print(e);
+                                    print(s);
+                                  }
+                                },
                               ),
                             ),
                           ],
@@ -359,19 +559,50 @@ Future<void> loginApi() async {
   }
 
   Widget _emailField() {
-    return TextFormField(
-      controller: _emailController,
-      keyboardType: TextInputType.emailAddress,
-      decoration: _inputDecoration("Enter your email address"),
-      validator: (value) {
-        if (value == null || value.isEmpty) {
-          return "Email is required";
+    return Autocomplete<SavedAccount>(
+      displayStringForOption: (SavedAccount option) => option.email,
+
+      optionsBuilder: (TextEditingValue textEditingValue) {
+        if (textEditingValue.text.isEmpty) {
+          return accounts;
         }
-        if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-          return "Enter valid email";
-        }
-        return null;
+
+        return accounts.where(
+          (account) => account.email.toLowerCase().contains(
+            textEditingValue.text.toLowerCase(),
+          ),
+        );
       },
+
+      onSelected: (SavedAccount account) {
+        _emailController.text = account.email;
+        _passwordController.text = account.password;
+        setState(() {});
+      },
+
+      fieldViewBuilder:
+          (context, textEditingController, focusNode, onFieldSubmitted) {
+            textEditingController.text = _emailController.text;
+
+            return TextFormField(
+              controller: textEditingController,
+              focusNode: focusNode,
+              keyboardType: TextInputType.emailAddress,
+              decoration: _inputDecoration("Enter your email address"),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return "Email is required";
+                }
+                if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                  return "Enter valid email";
+                }
+                return null;
+              },
+              onChanged: (value) {
+                _emailController.text = value;
+              },
+            );
+          },
     );
   }
 

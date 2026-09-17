@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "357296382847-4cqopf0iji8nudd1j7ugjpsglevqgjlm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.zuperr",
+            "certificate_hash": "88a8e00d6b939bf7b1dfc137237d6d62099d7dfc"
+          }
+        },
+        {
           "client_id": "357296382847-ll0mjmv31qeg8ttspuc7i05179d3f8v8.apps.googleusercontent.com",
           "client_type": 3
         }

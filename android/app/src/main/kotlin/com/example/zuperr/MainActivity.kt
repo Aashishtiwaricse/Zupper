@@ -1,4 +1,4 @@
-package com.example.zuperr
+package com.Zupper.zuperr
 
 import io.flutter.embedding.android.FlutterActivity
 

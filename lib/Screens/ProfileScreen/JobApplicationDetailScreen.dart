@@ -4,10 +4,7 @@ import 'package:zuperr/Screens/ProfileScreen/Widgets/application_progress.dart';
 class JobApplicationDetailScreen extends StatefulWidget {
   final Map<String, dynamic> job;
 
-  const JobApplicationDetailScreen({
-    super.key,
-    required this.job,
-  });
+  const JobApplicationDetailScreen({super.key, required this.job});
 
   @override
   State<JobApplicationDetailScreen> createState() =>
@@ -16,7 +13,6 @@ class JobApplicationDetailScreen extends StatefulWidget {
 
 class _JobApplicationDetailScreenState
     extends State<JobApplicationDetailScreen> {
-
   int selectedTab = 0;
   Color getStatusColor(String status) {
     switch (status.toLowerCase()) {
@@ -59,7 +55,8 @@ class _JobApplicationDetailScreenState
 
   @override
   Widget build(BuildContext context) {
-    final String status = widget.job["status"] ?? "Applied";
+    final applicantInfo = widget.job["applicantInfo"] ?? {};
+    final String status = applicantInfo["status"] ?? "Applied";
 
     final int daysSinceApplication = widget.job["daysSinceApplication"] ?? 0;
     final List skills = widget.job["skills"] ?? [];
@@ -129,24 +126,26 @@ class _JobApplicationDetailScreenState
                           width: double.infinity,
                           padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
                           decoration: BoxDecoration(
-    borderRadius: BorderRadius.circular(20),
-    color: const Color(0xFFF3F4F6),
-    gradient: LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [
-        Colors.white.withOpacity(0.25),
-        const Color(0xFF1877F2).withOpacity(0.25),
-      ],
-    ),
-    boxShadow: [
-      BoxShadow(
-        color: const Color(0xFF1877F2).withOpacity(0.12),
-        blurRadius: 18,
-        offset: const Offset(0, 6),
-      ),
-    ],
-  ),
+                            borderRadius: BorderRadius.circular(20),
+                            color: const Color(0xFFF3F4F6),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Colors.white.withValues(alpha: 0.25),
+                                const Color(0xFF1877F2).withValues(alpha: 0.25),
+                              ],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(
+                                  0xFF1877F2,
+                                ).withValues(alpha: 0.12),
+                                blurRadius: 18,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
                           child: Column(
                             children: [
                               Row(
@@ -178,7 +177,7 @@ class _JobApplicationDetailScreenState
                                           CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          widget.job["jobTitle"] ?? "-",
+                                          widget.job["title"] ?? "-",
                                           style: const TextStyle(
                                             color: Colors.black,
                                             fontWeight: FontWeight.bold,
@@ -255,7 +254,7 @@ class _JobApplicationDetailScreenState
                                     decoration: BoxDecoration(
                                       color: getStatusColor(
                                         status,
-                                      ).withOpacity(0.15),
+                                      ).withValues(alpha: 0.15),
                                       borderRadius: BorderRadius.circular(30),
                                       border: Border.all(
                                         color: getStatusColor(status),
@@ -299,9 +298,7 @@ class _JobApplicationDetailScreenState
                         // Timeline widget will come in Part-2
                         ApplicationProgress(status: status),
 
-                       
                         const SizedBox(height: 25),
-
 
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -322,7 +319,8 @@ class _JobApplicationDetailScreenState
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: Text(
-                            (widget.job["description"] ?? "No description available")
+                            (widget.job["description"] ??
+                                    "No description available")
                                 .toString(),
                             textAlign: TextAlign.justify,
                             style: const TextStyle(
@@ -366,9 +364,9 @@ class _JobApplicationDetailScreenState
                         ],
                         const SizedBox(height: 30),
 
-const SizedBox(height: 30),
-buildTabs(),
-const SizedBox(height: 30),
+                        const SizedBox(height: 30),
+                        buildTabs(),
+                        const SizedBox(height: 30),
                       ],
                     ),
                   ),
@@ -381,141 +379,133 @@ const SizedBox(height: 30),
     );
   }
 
-Widget buildTabs() {
-  final tabs = [
-    "Technical Skills",
-    "Portfolio",
-    "Soft Skills",
-    "Responsibilities",
-  ];
+  Widget buildTabs() {
+    final tabs = [
+      "Technical Skills",
+      "Portfolio",
+      "Soft Skills",
+      "Responsibilities",
+    ];
 
-  return Column(
-    children: [
-      SizedBox(
-        height: 54,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          itemCount: tabs.length,
-          itemBuilder: (context, index) {
-            final selected = selectedTab == index;
+    return Column(
+      children: [
+        SizedBox(
+          height: 54,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: tabs.length,
+            itemBuilder: (context, index) {
+              final selected = selectedTab == index;
 
-            return GestureDetector(
-              onTap: () {
-                setState(() {
-                  selectedTab = index;
-                });
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                margin: const EdgeInsets.only(right: 18),
-                padding: const EdgeInsets.symmetric(horizontal: 22),
-                alignment: Alignment.center,
-                decoration: selected
-                    ? const BoxDecoration(
-                        color: Color(0xff1877F2),
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(18),
-                          topRight: Radius.circular(18),
-                          bottomRight: Radius.circular(22),
-                        ),
-                      )
-                    : const BoxDecoration(),
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    selectedTab = index;
+                  });
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  margin: const EdgeInsets.only(right: 18),
+                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                  alignment: Alignment.center,
+                  decoration: selected
+                      ? const BoxDecoration(
+                          color: Color(0xff1877F2),
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(18),
+                            topRight: Radius.circular(18),
+                            bottomRight: Radius.circular(22),
+                          ),
+                        )
+                      : const BoxDecoration(),
+                  child: Text(
+                    tabs[index],
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                      color: selected ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+
+        Container(height: 1, color: Colors.grey.shade400),
+
+        const SizedBox(height: 24),
+
+        buildTabBody(),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget buildTabBody() {
+    switch (selectedTab) {
+   case 0:
+  final List<String> skills =
+    (widget.job["skills"] as List? ?? [])
+        .map((e) {
+          if (e is Map<String, dynamic>) {
+            return e["name"]?.toString() ?? "";
+          }
+          return e.toString();
+        })
+        .toList();
+
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 20),
+    child: Column(
+      children: skills.map((skill) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 18),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "•",
+                style: TextStyle(
+                  fontSize: 22,
+                  color: Color(0xff6B7280),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
                 child: Text(
-                  tabs[index],
-                  style: TextStyle(
+                  skill,
+                  style: const TextStyle(
                     fontSize: 17,
-                    fontWeight:
-                        selected ? FontWeight.w600 : FontWeight.w500,
-                    color: selected ? Colors.white : Colors.black87,
+                    color: Color(0xff6B7280),
+                    height: 1.6,
                   ),
                 ),
               ),
-            );
-          },
-        ),
-      ),
-
-      Container(
-        height: 1,
-        color: Colors.grey.shade400,
-      ),
-
-      const SizedBox(height: 24),
-
-      buildTabBody(),
-            const SizedBox(height: 24),
-
-    ],
+            ],
+          ),
+        );
+      }).toList(),
+    ),
   );
-}
 
-
-
-Widget buildTabBody() {
-  switch (selectedTab) {
-    case 0:
-      final skills = widget.job["skills"] ?? [];
-
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Column(
-          children: skills.map<Widget>((skill) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 18),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "•",
-                    style: TextStyle(
-                      fontSize: 22,
-                      color: Color(0xff6B7280),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Text(
-                      skill["name"],
-                      style: const TextStyle(
-                        fontSize: 17,
-                        color: Color(0xff6B7280),
-                        height: 1.6,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
-      );
-
-    case 1:
-      return const Padding(
-        padding: EdgeInsets.all(20),
-        child: Text(
-          "Portfolio not available.",
-          style: TextStyle(
-            fontSize: 17,
-            color: Color(0xff6B7280),
+      case 1:
+        return const Padding(
+          padding: EdgeInsets.all(20),
+          child: Text(
+            "Portfolio not available.",
+            style: TextStyle(fontSize: 17, color: Color(0xff6B7280)),
           ),
-        ),
-      );
+        );
 
-   
-
-    default:
-      return const Padding(
-        padding: EdgeInsets.all(20),
-        child: Text(
-          "Responsibilities not available.",
-          style: TextStyle(
-            fontSize: 17,
-            color: Color(0xff6B7280),
+      default:
+        return const Padding(
+          padding: EdgeInsets.all(20),
+          child: Text(
+            "Responsibilities not available.",
+            style: TextStyle(fontSize: 17, color: Color(0xff6B7280)),
           ),
-        ),
-      );
+        );
+    }
   }
-}
-
 }

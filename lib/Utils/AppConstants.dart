@@ -1,11 +1,15 @@
 class ApiConstants {
   static const String baseUrl = 'https://zuperr-backend.onrender.com';
 
+
+   //  static const String baseUrl ='https://8b6f-2401-4900-8840-801-3145-4e63-7fc1-9e85.ngrok-free.app';
+
   // Auth
   static const String signup = '/api/employee/signup';
   static const String signin = '/api/employee/signin';
   static const String verifyOtp = '/api/employee/verifyotp';
-  static const String resendOtp = '/api/employee/resendOtp';
+static const String verifyloginOtp = '/api/employee/verify-login-otp';
+  static const String resendOtp = '/api/employee/resendotp';
 
   // Profile
   static const String getCandidateData = '/api/employee/getcandidatedata';

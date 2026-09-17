@@ -15,18 +15,11 @@ Widget emptyBox(String title) {
         children: [
           const Text(
             "No data added yet",
-            style: TextStyle(fontSize: 18, color: Colors.grey),
+            style: TextStyle(fontSize: 14, color: Colors.grey),
           ),
           const SizedBox(height: 16),
 
-          ElevatedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.add),
-            label: Text(title),
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 50),
-            ),
-          ),
+        
         ],
       ),
     );

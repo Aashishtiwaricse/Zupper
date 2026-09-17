@@ -118,7 +118,7 @@ Future<void> saveVisibility() async {
                         width: 48,
 
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(.12),
+                          color: Colors.white.withValues(alpha: .12),
                           borderRadius:
                           BorderRadius.circular(14),
                         ),
@@ -163,8 +163,8 @@ Future<void> saveVisibility() async {
                   const Text(
                     "Profile Visibility",
                     style: TextStyle(
-                      fontSize: 25,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
 
@@ -193,12 +193,9 @@ Future<void> saveVisibility() async {
 
                     "Please Note:",
 
-                    style: TextStyle(
-
-                      fontSize: 22,
-
-                      fontWeight: FontWeight.bold,
-
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
 
@@ -212,7 +209,7 @@ Future<void> saveVisibility() async {
 
                       color: Colors.grey.shade600,
 
-                      fontSize: 18,
+                      fontSize: 16,
 
                       height: 1.6,
 
@@ -330,9 +327,12 @@ Future<void> saveVisibility() async {
                           color: Colors.white,
 
                         ),
+                        
                       ),
                     ),
-                  )
+                  ),
+                                    const SizedBox(height: 18),
+
                 ],
               ),
             ),

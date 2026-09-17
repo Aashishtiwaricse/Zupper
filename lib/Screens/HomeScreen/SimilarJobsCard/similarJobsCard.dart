@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:zuperr/Models/SimilarJobs/SimilarJobs.dart';
+import 'package:zuperr/Models/SimilarJobs.dart';
 import 'package:zuperr/Screens/HomeScreen/jobDetailsScreen.dart';
 
 class JobCard extends StatelessWidget {
@@ -23,7 +23,7 @@ class JobCard extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.blue.withOpacity(0.08),
+            color: Colors.blue.withValues(alpha: 0.08),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),

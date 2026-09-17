@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:zuperr/Models/SimilarJobs/AppliedJobs/appliedJobs.dart';
+import 'package:zuperr/Models/Jobs/AppliedJobs.dart';
 import 'package:zuperr/Screens/ProfileScreen/JobApplicationDetailScreen.dart';
 
 
@@ -57,7 +57,7 @@ class AppliedJobCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withOpacity(.12),
+              color: Colors.grey.withValues(alpha: .12),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -293,7 +293,7 @@ class AppliedJobCard extends StatelessWidget {
           width: 60,
           height: 60,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
+          errorBuilder: (_, _, _) =>
               _avatar(),
         ),
       );

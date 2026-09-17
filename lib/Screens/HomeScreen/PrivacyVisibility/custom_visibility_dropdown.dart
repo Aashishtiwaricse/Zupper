@@ -6,11 +6,11 @@ class CustomVisibilityDropdown extends StatefulWidget {
   final ValueChanged<String?> onChanged;
 
   const CustomVisibilityDropdown({
-    Key? key,
+    super.key,
     required this.value,
     required this.items,
     required this.onChanged,
-  }) : super(key: key);
+  });
 
   @override
   State<CustomVisibilityDropdown> createState() =>
@@ -104,7 +104,7 @@ class _CustomVisibilityDropdownState
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(.08),
+                  color: Colors.black.withValues(alpha: .08),
                   blurRadius: 15,
                   offset: const Offset(0, 5),
                 ),

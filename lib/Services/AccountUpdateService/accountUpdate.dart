@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zuperr/Models/PasswordUpdate/passUpdate.dart';
 import 'package:zuperr/Utils/AppConstants.dart';
 
 class AccountSecurityService {
@@ -9,83 +10,102 @@ class AccountSecurityService {
     return prefs.getString("auth_token");
   }
 
-static Future<Map<String, dynamic>> validateNewEmail(String email) async {
-  try {
-    final token = await getToken();
-
-    final response = await http.post(
-      Uri.parse(
-        "${ApiConstants.baseUrl}/api/employee/validateuserforupdatecandidateemail",
-      ),
-      headers: {
-        "Authorization": "Bearer $token",
-        "Content-Type": "application/json",
-      },
-      body: jsonEncode({"newEmail": email}),
-    );
-
-    print("Validate Email Status: ${response.statusCode}");
-    print("Validate Email Response: ${response.body}");
-
-    final data = jsonDecode(response.body);
-
-    if (response.statusCode == 200) {
-      return {
-        "success": true,
-        "message": data["message"] ?? "OTP sent successfully",
-      };
-    }
-
-    return {
-      "success": false,
-      "message": data["message"] ?? "Something went wrong",
-    };
-  } catch (e) {
-    print("Validate Email Error: $e");
-
-    return {
-      "success": false,
-      "message": "Network error. Please try again.",
-    };
+  static Future<String?> getCurrentEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString("email");
   }
-}
 
-  static Future<bool> verifyEmailOtp(String otp) async {
+  static Future<Map<String, dynamic>> validateEmployerEmail({
+    required String oldEmail,
+    required String newEmail,
+    required String password,
+  }) async {
+    try {
+      final token = await getToken();
+
+      final response = await http.post(
+        Uri.parse(
+          "${ApiConstants.baseUrl}/api/employee/validateuserforupdatecandidateemail",
+        ),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({
+          "oldEmail": oldEmail,
+          "newEmail": newEmail,
+          "password": password,
+        }),
+      );
+      print("from change email validateEmployerEmail");
+
+      print(response.body);
+      print(response.statusCode);
+
+      print("RAW RESPONSE: ${response.body}");
+
+      if (response.body.isEmpty) {
+        return {"success": false, "message": "Empty response from server"};
+      }
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          "success": true,
+          "message": "OTP sent successfully",
+          "EmailUpdateOtp": data["EmailUpdateOtp"],
+          "EmailUpdatetoken": data["EmailUpdatetoken"],
+        };
+      }
+
+      return {
+        "success": false,
+        "message": data["message"] ?? "Something went wrong",
+      };
+    } catch (e) {
+      return {"success": false, "message": "Network error"};
+    }
+  }
+
+  static Future<Map<String, dynamic>> verifyEmailOtp({
+    required String otp,
+    required String emailUpdateToken,
+  }) async {
     try {
       final token = await getToken();
 
       if (token == null) {
-        print("Token not found");
-        return false;
+        return {"success": false, "message": "Authentication token not found."};
       }
 
-      final response = await http
-          .post(
-            Uri.parse(
-              "${ApiConstants.baseUrl}/api/employee/verifyotpforemailupdate",
-            ),
-            headers: {
-              "Authorization": "Bearer $token",
-              "Content-Type": "application/json",
-            },
-            body: jsonEncode({
-              "otp": otp,
-            }),
-          )
-          .timeout(const Duration(seconds: 20));
+      final response = await http.post(
+        Uri.parse(
+          "${ApiConstants.baseUrl}/api/employee/verifyotpforemailupdate",
+        ),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({"otp": otp, "emailUpdateToken": emailUpdateToken}),
+      );
 
-      print("OTP Status: ${response.statusCode}");
-      print("OTP Response: ${response.body}");
+      final data = jsonDecode(response.body);
 
-      return response.statusCode == 200 ||
-          response.statusCode == 201;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {
+          "success": true,
+          "message": data["message"] ?? "OTP verified successfully.",
+        };
+      } else {
+        return {"success": false, "message": data["message"] ?? "Invalid OTP."};
+      }
     } catch (e) {
-      print("Verify OTP Error: $e");
-      return false;
+      return {"success": false, "message": "Network error. Please try again."};
     }
   }
 
-  static Future<bool> updatePassword(
+  static Future<PasswordUpdateResult> updatePassword(
     String oldPassword,
     String newPassword,
   ) async {
@@ -93,8 +113,10 @@ static Future<Map<String, dynamic>> validateNewEmail(String email) async {
       final token = await getToken();
 
       if (token == null) {
-        print("Token not found");
-        return false;
+        return PasswordUpdateResult(
+          success: false,
+          message: "Authentication token not found.",
+        );
       }
 
       final response = await http
@@ -116,29 +138,28 @@ static Future<Map<String, dynamic>> validateNewEmail(String email) async {
       print("Password Update Status: ${response.statusCode}");
       print("Password Update Response: ${response.body}");
 
+      final body = jsonDecode(response.body);
+      final message = body["message"] ?? "Something went wrong.";
+
       switch (response.statusCode) {
         case 200:
         case 201:
-          return true;
+          return PasswordUpdateResult(success: true, message: message);
 
         case 400:
-          print("Invalid password");
-          return false;
-
         case 401:
-          print("Unauthorized");
-          return false;
-
+        case 404:
         case 500:
-          print("Server Error");
-          return false;
+          return PasswordUpdateResult(success: false, message: message);
 
         default:
-          return false;
+          return PasswordUpdateResult(success: false, message: message);
       }
     } catch (e) {
-      print("Update Password Error: $e");
-      return false;
+      return PasswordUpdateResult(
+        success: false,
+        message: "Unable to connect to server. Please try again.",
+      );
     }
   }
 
@@ -160,17 +181,14 @@ static Future<Map<String, dynamic>> validateNewEmail(String email) async {
               "Authorization": "Bearer $token",
               "Content-Type": "application/json",
             },
-            body: jsonEncode({
-              "password": password,
-            }),
+            body: jsonEncode({"password": password}),
           )
           .timeout(const Duration(seconds: 20));
 
       print("Verify Password Status: ${response.statusCode}");
       print("Verify Password Response: ${response.body}");
 
-      return response.statusCode == 200 ||
-          response.statusCode == 201;
+      return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
       print("Verify Password Error: $e");
       return false;

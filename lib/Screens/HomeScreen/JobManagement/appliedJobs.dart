@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:zuperr/Models/SimilarJobs/AppliedJobs/appliedJobs.dart';
-import 'package:zuperr/Screens/HomeScreen/JobManagement/appliedJobsCard.dart';
-
-import '../../../Services/Jobs/appliedJobs.dart';
+import 'package:zuperr/Models/Jobs/AppliedJobs.dart';
+import 'package:zuperr/Screens/HomeScreen/JobManagement/appliedJobsCard.dart' show AppliedJobCard;
+import 'package:zuperr/Services/Jobs/appliedJobs.dart';
 
 
 class AppliedJobsScreen extends StatefulWidget {
@@ -31,20 +30,20 @@ class _AppliedJobsScreenState extends State<AppliedJobsScreen> {
   }
 
   Future<void> loadJobs() async {
-    setState(() {
-      isLoading = true;
-    });
+  setState(() {
+    isLoading = true;
+  });
 
-    final data =
-        await AppliedJobsService.getAppliedJobs();
+  final data = await AppliedJobsService.getAppliedJobs();
 
-    if (!mounted) return;
+  if (!mounted) return;
 
-    setState(() {
-    
-      isLoading = false;
-    });
-  }
+  setState(() {
+    jobs = data;
+    filteredJobs = data;
+    isLoading = false;
+  });
+}
 
   void searchJobs() {
     final query =
@@ -109,7 +108,7 @@ class _AppliedJobsScreenState extends State<AppliedJobsScreen> {
                         width: 48,
                         decoration: BoxDecoration(
                           color: Colors.white
-                              .withOpacity(.15),
+                              .withValues(alpha: .15),
                           borderRadius:
                               BorderRadius.circular(
                                   14),

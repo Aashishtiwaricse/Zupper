@@ -37,6 +37,8 @@ List<String> selectedStates = [];
   ];
 
   final List<String> salaries = [
+        "₹0 LPA - ₹2 LPA",
+
     "₹2 LPA - ₹5 LPA",
     "₹5 LPA - ₹10 LPA",
     "₹10 LPA - ₹15 LPA",
@@ -407,7 +409,7 @@ List<String> selectedStates = [];
         boxShadow: [
           BoxShadow(
             blurRadius: 10,
-            color: Colors.black.withOpacity(.08),
+            color: Colors.black.withValues(alpha: .08),
           )
         ],
       ),

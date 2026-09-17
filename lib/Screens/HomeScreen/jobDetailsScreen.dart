@@ -1,10 +1,20 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:get/get_core/src/get_main.dart';
+import 'package:get/get_navigation/src/extension_navigation.dart';
+import 'package:get/get_navigation/src/snackbar/snackbar.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zuperr/Screens/HomeScreen/JobManagement/saved_Jobs.dart';
 import 'package:zuperr/Screens/HomeScreen/SummarieswithAi.dart';
 import 'package:zuperr/Screens/HomeScreen/similarJobs.dart';
+import 'package:zuperr/Services/AnalyzieCandidate/analyziecandidate.dart';
 import 'package:zuperr/Services/ApplyForJobs/applyForJobs.dart';
+import 'package:zuperr/Services/CandidatesData/candidates.dart';
+import 'package:zuperr/Services/Jobs/UnsaveJobs/UnsaveJobs.dart';
 import 'package:zuperr/Services/SaveJobs/saveJobs.dart';
+import 'package:zuperr/Utils/AppConstants.dart';
 
 class JobDetailScreen extends StatefulWidget {
   final dynamic job;
@@ -17,6 +27,7 @@ class JobDetailScreen extends StatefulWidget {
 class _JobDetailScreenState extends State<JobDetailScreen> {
   bool isExpanded = false;
   bool _isApplying = false;
+  bool _isBookmarkLoading = false;
   void openSummary(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -26,6 +37,47 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     );
   }
 
+  Map<String, dynamic>? candidateData;
+  bool _loadingCandidate = true;
+  bool _isUserLoggedIn = false;
+bool _checkingLogin = true;
+
+  @override
+void initState() {
+  super.initState();
+  loadCandidate();
+  _checkLoginStatus();
+}
+
+Future<void> _checkLoginStatus() async {
+  final loggedIn = await _isLoggedIn();
+
+  if (!mounted) return;
+
+  setState(() {
+    _isUserLoggedIn = loggedIn;
+    _checkingLogin = false;
+  });
+}
+
+  Future<void> loadCandidate() async {
+    final data = await CandidateService.getCandidateData();
+
+    if (!mounted) return;
+
+    setState(() {
+      candidateData = data;
+      _loadingCandidate = false;
+    });
+  }
+
+Future<bool> _isLoggedIn() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  final token = prefs.getString("auth_token");
+
+  return token != null && token.isNotEmpty;
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -40,12 +92,16 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                 SingleChildScrollView(
                   padding: const EdgeInsets.only(bottom: 120),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _jobInfo(),
                       _description(),
-                      if (isExpanded) _tabsSection(),
-                                SimilarJobs(jobId: widget.job["_id"].toString()),
 
+                      if (isExpanded) ...[
+                        _tabsSection(),
+                        const SizedBox(height: 20),
+                        SimilarJobs(jobId: widget.job["_id"].toString()),
+                      ],
                     ],
                   ),
                 ),
@@ -85,6 +141,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+
+                  if (_isUserLoggedIn)
+
               GestureDetector(
                 onTap: () => Navigator.pop(context),
                 child: Container(
@@ -101,26 +160,297 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   ),
                 ),
               ),
+//      const SizedBox(width: 38),
+          if (_isUserLoggedIn)
+
               Row(
                 children: [
                   GestureDetector(
-                    onTap: () async {
-                      print(widget.job);
-                      print("Job ID: ${widget.job['_id']}");
+                    onTap: _isBookmarkLoading
+                        ? null
+                        : () async {
+                          
+                            // Already saved
+                            if (widget.job["isSaved"] == true) {
+                              final remove = await showDialog<bool>(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (_) {
+                                  return Dialog(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(28),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(24),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            width: 72,
+                                            height: 72,
+                                            decoration: BoxDecoration(
+                                              color: Colors.red.shade50,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.bookmark_remove_rounded,
+                                              color: Colors.red,
+                                              size: 38,
+                                            ),
+                                          ),
 
-                      final success = await SaveJobService.saveJob(
-                        widget.job["_id"].toString(),
-                      );
+                                          const SizedBox(height: 22),
 
-                      if (!mounted) return;
+                                          const Text(
+                                            "Remove Saved Job?",
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xff111827),
+                                            ),
+                                          ),
 
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            success
-                                ? "Job saved successfully"
-                                : "Failed to save job",
-                          ),
+                                          const SizedBox(height: 12),
+
+                                          const Text(
+                                            "This job will be removed from your saved jobs list. You can always save it again later.",
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              height: 1.5,
+                                              color: Color(0xff6B7280),
+                                            ),
+                                          ),
+
+                                          const SizedBox(height: 28),
+
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: OutlinedButton(
+                                                  style: OutlinedButton.styleFrom(
+                                                    minimumSize:
+                                                        const Size.fromHeight(
+                                                          52,
+                                                        ),
+                                                    side: const BorderSide(
+                                                      color: Color(0xffD1D5DB),
+                                                    ),
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            14,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                  onPressed: () =>
+                                                      Navigator.pop(
+                                                        context,
+                                                        false,
+                                                      ),
+                                                  child: const Text(
+                                                    "Cancel",
+                                                    style: TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: Color(0xff374151),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+
+                                              const SizedBox(width: 14),
+
+                                              Expanded(
+                                                child: ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: Colors.red,
+                                                    foregroundColor:
+                                                        Colors.white,
+                                                    elevation: 0,
+                                                    minimumSize:
+                                                        const Size.fromHeight(
+                                                          52,
+                                                        ),
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            14,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                  onPressed: () =>
+                                                      Navigator.pop(
+                                                        context,
+                                                        true,
+                                                      ),
+                                                  child: const Text(
+                                                    "Remove",
+                                                    style: TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+
+                              if (remove != true) return;
+
+                              setState(() => _isBookmarkLoading = true);
+
+                              try {
+                                final success =
+                                    await UnsaveJobService.unsaveJob(
+                                      widget.job["_id"],
+                                    );
+
+                                if (!mounted) return;
+
+                                if (success) {
+                                  setState(() {
+                                    widget.job["isSaved"] = false;
+                                  });
+
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        "Job removed from saved jobs.",
+                                      ),
+                                    ),
+                                  );
+                                }
+                              } finally {
+                                if (mounted) {
+                                  setState(() => _isBookmarkLoading = false);
+                                }
+                              }
+
+                              return;
+                            }
+
+                            // Save job
+                            setState(() => _isBookmarkLoading = true);
+
+                            try {
+                              final success = await SaveJobService.saveJob(
+                                widget.job["_id"].toString(),
+                              );
+
+                              if (!mounted) return;
+
+                              if (success) {
+                                setState(() {
+                                  widget.job["isSaved"] = true;
+                                });
+
+                                final openSavedJobs = await showDialog<bool>(
+                                  context: context,
+                                  builder: (_) => AlertDialog(
+                                    title: const Text("Job Saved"),
+                                    content: const Text(
+                                      "Job saved successfully.\n\nWould you like to view your saved jobs?",
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: const Text("Not Now"),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: const Text("View Saved Jobs"),
+                                      ),
+                                    ],
+                                  ),
+                                );
+
+                                if (openSavedJobs == true) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const SavedJobsScreen(),
+                                    ),
+                                  );
+                                }
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text("Failed to save job."),
+                                  ),
+                                );
+                              }
+                            } finally {
+                              if (mounted) {
+                                setState(() => _isBookmarkLoading = false);
+                              }
+                            }
+                          },
+                    child: Container(
+                      height: 38,
+                      width: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Center(
+                        child: _isBookmarkLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : Icon(
+                                widget.job["isSaved"] == true
+                                    ? Icons.bookmark
+                                    : Icons.bookmark_border,
+                                color: Colors.white,
+                              ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                  GestureDetector(
+                    onTap: () {
+                      final jobId = widget.job["_id"].toString();
+
+                      final jobTitle =
+                          widget.job["jobTitle"] ?? "Job Opportunity";
+
+                      final company = widget.job["companyName"] ?? "";
+final link =
+    "${ApiConstants.baseUrl}/api/public/jobs/$jobId";
+                      print("from  job share");
+                      print(link);
+
+                      SharePlus.instance.share(
+                        ShareParams(
+                          subject: jobTitle,
+                          text:
+                              '''
+🚀 $jobTitle
+
+${company.isNotEmpty ? "Company: $company\n" : ""}
+
+Apply now:
+$link
+
+Shared via Zuperr
+''',
                         ),
                       );
                     },
@@ -131,19 +461,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                         color: Colors.white24,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(Icons.bookmark_border, color: Colors.white),
-                    ),
-                  ),
-                  SizedBox(width: 16),
-                  GestureDetector(
-                    child: Container(
-                      height: 38,
-                      width: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(Icons.share, color: Colors.white),
+                      child: const Icon(Icons.share, color: Colors.white),
                     ),
                   ),
                 ],
@@ -156,6 +474,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   }
 
   Widget _jobInfo() {
+    final List skills = widget.job['skills'] ?? [];
+
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -231,12 +551,12 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           const SizedBox(height: 19),
 
           Wrap(
-            spacing: 15,
-            runSpacing: 15,
-            children: (widget.job['skills'] as List?)?.isNotEmpty == true
-                ? (widget.job['skills'] as List)
-                      .map((skill) => SkillChip(label: skill.toString()))
-                      .toList()
+            spacing: 10,
+            runSpacing: 10,
+            children: skills.isNotEmpty
+                ? skills.map<Widget>((skill) {
+                    return SkillChip(label: skill["Name"] ?? "");
+                  }).toList()
                 : [const SkillChip(label: "No Skills")],
           ),
           const SizedBox(height: 20),
@@ -302,7 +622,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           child: Container(
             height: 110,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2), // 👈 MUST be > 0
+              color: Colors.white.withValues(alpha: 0.2), // 👈 MUST be > 0
             ),
             child: Container(
               padding: const EdgeInsets.only(bottom: 12),
@@ -311,8 +631,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.white.withOpacity(0.0),
-                    Colors.white.withOpacity(0.7),
+                    Colors.white.withValues(alpha: 0.0),
+                    Colors.white.withValues(alpha: 0.7),
                     Colors.white,
                   ],
                 ),
@@ -398,11 +718,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           SizedBox(
             height: 250, // 👈 important for layout
             child: TabBarView(
-              children: [
-                _requiredSkills(),
-                _requiredSkills(),
-                _requiredSkills(),
-              ],
+              children: [_requiredSkills(), _portfolio(), _qualification()],
             ),
           ),
         ],
@@ -411,45 +727,159 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   }
 
   Widget _requiredSkills() {
-    final skills = widget.job['skills'] as List? ?? [];
+    final List skills = widget.job['skills'] ?? [];
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (skills.isNotEmpty)
-            ...skills.map(
-              (skill) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  "• $skill",
-                  style: const TextStyle(
-                    color: Color(0xFF6B7280),
-                    fontSize: 14,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (skills.isNotEmpty)
+              ...skills.map(
+                (skill) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    "• ${skill['Name']}",
+
+                    style: const TextStyle(
+                      color: Color(0xFF6B7280),
+                      fontSize: 14,
+                    ),
                   ),
                 ),
               ),
-            ),
 
-          if (skills.isEmpty)
-            const Text(
-              "No skills available",
-              style: TextStyle(color: Color(0xFF6B7280), fontSize: 14),
-            ),
+            if (skills.isEmpty)
+              const Text(
+                "No skills available",
+                style: TextStyle(color: Color(0xFF6B7280), fontSize: 14),
+              ),
 
-          const SizedBox(height: 35),
-
-        ],
+            const SizedBox(height: 35),
+          ],
+        ),
       ),
     );
   }
 
   Widget _portfolio() {
-    return const Center(
-      child: Text(
-        "Portfolio content here",
-        style: TextStyle(color: Colors.black54),
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _infoTile(
+              Icons.category_outlined,
+              "Job Category",
+              widget.job["jobCategory"] ?? "Not Available",
+            ),
+
+            _infoTile(
+              Icons.business_center_outlined,
+              "Industry",
+              widget.job["industry"] is List
+                  ? (widget.job["industry"] as List).join(", ")
+                  : "Not Available",
+            ),
+
+            _infoTile(
+              Icons.work_outline,
+              "Work Mode",
+              widget.job["workMode"] ?? "Not Available",
+            ),
+
+            _infoTile(
+              Icons.star_outline,
+              "Experience Level",
+              widget.job["experienceLevel"] ?? "Not Available",
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _qualification() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _infoTile(
+              Icons.school_outlined,
+              "Education",
+              widget.job["education"] ?? "Not Available",
+            ),
+
+            _infoTile(
+              Icons.menu_book_outlined,
+              "Degree",
+              widget.job["degree"] ?? "Not Available",
+            ),
+
+            _infoTile(
+              Icons.work_history_outlined,
+              "Experience",
+              "${widget.job["minimumExperienceInYears"]}-${widget.job["maximumExperienceInYears"]} Years",
+            ),
+
+            _infoTile(
+              Icons.person_outline,
+              "Gender",
+              widget.job["gender"] ?? "Any",
+            ),
+
+            _infoTile(
+              Icons.cake_outlined,
+              "Age",
+              "${widget.job["fromAge"]}-${widget.job["toAge"]} Years",
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoTile(IconData icon, String title, String value) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: const Color(0xff1E6BE3)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -464,31 +894,90 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           // ✨ Summarize Button
           SizedBox(
             width: double.infinity,
-            height: 56,
-            child: OutlinedButton(
-              onPressed: () => openSummary(context),
-              style: OutlinedButton.styleFrom(
-                backgroundColor: const Color(0xFFF4F8FF),
-                side: const BorderSide(color: Color(0xFF2F6FE4), width: 1.5),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+            height: 54,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.auto_awesome, color: Color(0xff1E6BE3)),
+              label: const Text(
+                "Summarize with AI",
+                style: TextStyle(
+                  color: Color(0xff1E6BE3),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.auto_awesome, color: Color(0xFF2F6FE4), size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    "Summarize with AI",
-                    style: TextStyle(
-                      color: Color(0xFF2F6FE4),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xff1E6BE3)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
+              onPressed: () async {
+                if (candidateData == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Candidate not loaded")),
+                  );
+                  return;
+                }
+
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (_) =>
+                      const Center(child: CircularProgressIndicator()),
+                );
+
+                final summary = await AnalyzeCandidateService.analyzeCandidate(
+                  candidateProfile: candidateData!,
+                  jobDescription: {
+                    "_id": widget.job.id,
+
+                    "title": widget.job.title,
+
+                    "jobDescription": widget.job.jobDescription,
+
+                    "skills": widget.job.skills
+                        .map((e) => {"Name": e.name})
+                        .toList(),
+
+                    "education": widget.job.education,
+
+                    "degree": widget.job.degree,
+
+                    "industry": widget.job.industry,
+
+                    "jobCategory": widget.job.jobCategory,
+
+                    "experienceLevel": widget.job.experienceLevel,
+
+                    "workMode": widget.job.workMode,
+                  },
+                );
+
+                Navigator.pop(context);
+
+                if (summary == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Unable to generate AI summary"),
+                    ),
+                  );
+                  return;
+                }
+
+                showDialog(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text("AI Summary"),
+                    content: SingleChildScrollView(child: Text(summary)),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text("Close"),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
 
@@ -502,11 +991,49 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
               onPressed: _isApplying
                   ? null
                   : () async {
+                    // 🔐 Check authentication first
+        final loggedIn = await _isLoggedIn();
+                print("Share Button");
+
+        print(loggedIn);
+
+        if (!loggedIn) {
+          Get.snackbar(
+            "Login Required",
+            "Please login to apply for this job.",
+            snackPosition: SnackPosition.TOP,
+            backgroundColor: Colors.orange,
+            colorText: Colors.white,
+            margin: const EdgeInsets.all(16),
+            borderRadius: 12,
+            duration: const Duration(seconds: 3),
+            icon: const Icon(
+              Icons.lock_outline,
+              color: Colors.white,
+            ),
+          );
+
+          // Save this job as pending
+          final prefs = await SharedPreferences.getInstance();
+
+          await prefs.setString(
+            "pending_job_id",
+            widget.job["_id"].toString(),
+          );
+
+          // Go to login
+          Navigator.pushNamed(
+            context,
+            '/login',
+          );
+
+          return;
+        }
                       setState(() {
                         _isApplying = true;
                       });
 
-                      final success = await ApplyJobService.applyForJob(
+                      final result = await ApplyJobService.applyForJob(
                         widget.job["_id"].toString(),
                       );
 
@@ -516,15 +1043,37 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                         _isApplying = false;
                       });
 
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            success
-                                ? "Job applied successfully"
-                                : "Failed to apply for job",
+                      // Hide any existing snackbar
+                      Get.closeAllSnackbars();
+
+                      if (result["success"] == true) {
+                        Get.snackbar(
+                          "Success",
+                          result["message"] ?? "Job applied successfully!",
+                          snackPosition: SnackPosition.TOP,
+                          backgroundColor: Colors.green,
+                          colorText: Colors.white,
+                          margin: const EdgeInsets.all(16),
+                          borderRadius: 12,
+                          duration: const Duration(seconds: 3),
+                          icon: const Icon(
+                            Icons.check_circle,
+                            color: Colors.white,
                           ),
-                        ),
-                      );
+                        );
+                      } else {
+                        Get.snackbar(
+                          "Error",
+                          result["message"] ?? "Failed to apply for this job.",
+                          snackPosition: SnackPosition.TOP,
+                          backgroundColor: Colors.red,
+                          colorText: Colors.white,
+                          margin: const EdgeInsets.all(16),
+                          borderRadius: 12,
+                          duration: const Duration(seconds: 3),
+                          icon: const Icon(Icons.error, color: Colors.white),
+                        );
+                      }
                     },
               style: ElevatedButton.styleFrom(
                 elevation: 0,
@@ -615,28 +1164,23 @@ class InfoBox extends StatelessWidget {
 
 class SkillChip extends StatelessWidget {
   final String label;
+  final VoidCallback? onDelete;
 
-  const SkillChip({super.key, required this.label});
+  const SkillChip({super.key, required this.label, this.onDelete});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
-      decoration: BoxDecoration(
-        // color: const Color(0xFFF3F4F6), // soft gray background
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.black12, // subtle border
-          width: 1,
-        ),
-      ),
-      child: Text(
+    return Chip(
+      label: Text(
         label,
-        style: const TextStyle(
-          fontSize: 14,
-          color: Colors.black, // medium-dark gray
-          fontWeight: FontWeight.w400,
-        ),
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+      ),
+      deleteIcon: onDelete != null ? const Icon(Icons.close, size: 18) : null,
+      onDeleted: onDelete,
+      backgroundColor: Colors.grey.shade100,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: Colors.grey.shade300),
       ),
     );
   }

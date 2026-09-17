@@ -18,7 +18,7 @@ class JobCard extends StatelessWidget {
         border: Border.all(color: const Color(0xffDCE7FF), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xff2563EB).withOpacity(0.08),
+            color: const Color(0xff2563EB).withValues(alpha: 0.08),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),

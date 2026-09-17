@@ -17,8 +17,12 @@ class CandidateService {
           },
         ),
       );
+      print("Candidate Data Response: ${response.statusCode}");
+      print(response.data);
 
       if (response.statusCode == 200) {
+        print("profile data");
+        print(response.data);
         return response.data;
       }
     } catch (e) {

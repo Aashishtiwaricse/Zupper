@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 
 import 'package:zuperr/Screens/HomeMain/homeMain.dart';
+import 'package:zuperr/Screens/SignInScreen/signIn.dart';
 
 class UploadResumeScreen extends StatefulWidget {
   const UploadResumeScreen({super.key});
@@ -175,7 +176,7 @@ Navigator.push(
                   decoration: BoxDecoration(
                     color: (_selectedFile != null && !_isUploading)
                         ? Colors.blue
-                        : Colors.blue.withOpacity(0.4),
+                        : Colors.blue.withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   alignment: Alignment.center,
@@ -197,13 +198,23 @@ Navigator.push(
 
             const SizedBox(height: 18),
 
-            const Text(
-              "Skip and continue without resume",
-              style: TextStyle(
-                decoration: TextDecoration.underline,
-                color: Colors.grey,
-              ),
-            ),
+            GestureDetector(
+  onTap: () {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LoginScreen(),
+      ),
+    );
+  },
+  child: const Text(
+    "Skip and continue without resume",
+    style: TextStyle(
+      decoration: TextDecoration.underline,
+      color: Colors.grey,
+    ),
+  ),
+),
 
             const SizedBox(height: 20),
           ],

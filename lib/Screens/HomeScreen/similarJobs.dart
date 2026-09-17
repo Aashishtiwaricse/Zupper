@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:zuperr/Models/SimilarJobs/SimilarJobs.dart';
+import 'package:zuperr/Models/SimilarJobs.dart';
 import 'package:zuperr/Screens/HomeScreen/HomeScreen.dart' hide JobCard;
 import 'package:zuperr/Screens/HomeScreen/SimilarJobsCard/similarJobsCard.dart';
 import 'package:zuperr/Screens/HomeScreen/allJobs.dart' hide JobCard;
+import 'package:zuperr/Screens/HomeScreen/similarJobsAllScreen.dart';
 import 'package:zuperr/Services/SimilarJobs/similarJobs.dart';
 
 class SimilarJobs extends StatelessWidget {
@@ -43,8 +44,8 @@ class SimilarJobs extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(right: 10),
                 child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
                   children: [
                     Row(
                       children: [
@@ -74,7 +75,7 @@ class SimilarJobs extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => AllJobsScreen(jobs: jobs),
+                            builder: (_) => SimilarJobsAllScreen(jobs: jobs),
                           ),
                         );
                       },
@@ -98,7 +99,7 @@ class SimilarJobs extends StatelessWidget {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: jobs.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 16),
+                  separatorBuilder: (_, _) => const SizedBox(width: 16),
                   itemBuilder: (context, index) {
                     return SizedBox(
                       width: MediaQuery.of(context).size.width * 0.82,

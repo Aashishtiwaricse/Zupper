@@ -14,35 +14,66 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int currentIndex = 0;
 
-  final List<Widget> screens = [
-    const HomeScreen(),        // 👈 your existing UI
-    const CompaniesScreen(),
-    const Analytics(),
-    const ProfileScreen(),
-  ];
+  final homeKey = GlobalKey<HomeScreenState>();
+  final companyKey = GlobalKey<CompaniesScreenState>();
+  final analyticsKey = GlobalKey<AnalyticsState>();
+  final profileKey = GlobalKey<ProfileScreenState>();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack( // ✅ keeps state
+      body: IndexedStack(
         index: currentIndex,
-        children: screens,
+        children: [
+          HomeScreen(key: homeKey),
+          CompaniesScreen(key: companyKey),
+          Analytics(key: analyticsKey),
+          ProfileScreen(key: profileKey),
+        ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: const Color(0xffF8F8F8), // or Colors.white
+        selectedItemColor: const Color(0xff1E6BE3),
+        unselectedItemColor: Colors.black54,
         onTap: (index) {
           setState(() {
             currentIndex = index;
           });
+
+          switch (index) {
+            case 0:
+              homeKey.currentState?.refreshData();
+              break;
+            case 1:
+              companyKey.currentState?.refreshData();
+              break;
+            case 2:
+              analyticsKey.currentState?.refreshData();
+              break;
+            case 3:
+              profileKey.currentState?.refreshData();
+              break;
+          }
         },
-        selectedItemColor: const Color(0xff1E6BE3),
-        unselectedItemColor: Colors.black54,
-        type: BottomNavigationBarType.fixed,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.work_outline), label: "Jobs"),
-          BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: "Companies"),
-          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: "Analytics"),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: "Profile"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.work_outline),
+            label: "Jobs",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.grid_view),
+            label: "Companies",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart),
+            label: "Analytics",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            label: "Profile",
+          ),
         ],
       ),
     );

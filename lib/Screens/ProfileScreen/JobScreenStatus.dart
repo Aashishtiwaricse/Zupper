@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zuperr/Screens/ProfileScreen/JobApplicationDetailScreen.dart';
-import 'package:zuperr/Screens/ProfileScreen/Widgets/widgets.dart';
 import 'package:zuperr/Services/CandidatesData/candidates.dart';
 import 'package:zuperr/Services/profileUpdateData/updateProfile.dart';
 import 'package:zuperr/Utils/AppConstants.dart';
@@ -95,85 +94,7 @@ class _JobApplicationStatusScreenState
     );
   }
 
-  Future<void> _showCTCDialog() async {
-    String preferredLocation =
-        profile?['careerPreference']?['preferredLocation'] ?? "";
-
-    await showDialog(
-      context: context,
-      builder: (_) {
-        return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return AlertDialog(
-              title: const Text("Update Salary Details"),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: minSalaryController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: "Minimum Salary (LPA)",
-                      ),
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    TextField(
-                      controller: maxSalaryController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: "Maximum Salary (LPA)",
-                      ),
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    TextFormField(
-                      initialValue: preferredLocation,
-                      decoration: const InputDecoration(
-                        labelText: "Preferred Location",
-                      ),
-                      onChanged: (value) {
-                        preferredLocation = value;
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
-                ),
-
-                ElevatedButton(
-                  onPressed: () async {
-                    // Update local profile
-                    profile?["careerPreference"]["minimumSalaryLPA"] =
-                        int.tryParse(minSalaryController.text) ?? 0;
-
-                    profile?["careerPreference"]["maximumSalaryLPA"] =
-                        int.tryParse(maxSalaryController.text) ?? 0;
-
-                    profile?["careerPreference"]["preferredLocation"] =
-                        preferredLocation;
-
-                    await updateProfile();
-
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Save"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
+ 
   Future<void> updateProfile() async {
     final Map<String, dynamic> body = {
       "firstname": profile?["firstname"],
@@ -249,88 +170,7 @@ class _JobApplicationStatusScreenState
     }
   }
 
-  Future<void> _showExperienceDialog() async {
-    String tempExperience = experienceLevel;
-
-    await showDialog(
-      context: context,
-      builder: (_) {
-        return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return AlertDialog(
-              title: const Text("Update Experience"),
-
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<String>(
-                    value: tempExperience.isEmpty ? null : tempExperience,
-                    decoration: const InputDecoration(
-                      labelText: "Experience Level",
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: "fresher",
-                        child: Text("Fresher"),
-                      ),
-                      DropdownMenuItem(
-                        value: "experienced",
-                        child: Text("Experienced"),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      setStateDialog(() {
-                        tempExperience = value!;
-                      });
-                    },
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  TextField(
-                    controller: minExpController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: "Minimum Experience",
-                    ),
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  TextField(
-                    controller: maxExpController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: "Maximum Experience",
-                    ),
-                  ),
-                ],
-              ),
-
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
-                ),
-
-                ElevatedButton(
-                  onPressed: () async {
-                    setState(() {
-                      experienceLevel = tempExperience;
-                    });
-                    await updateProfile();
-
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Save"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
+  
 
   Future<void> loadProfile() async {
     final data = await CandidateService.getCandidateData();
@@ -477,101 +317,7 @@ class _JobApplicationStatusScreenState
               ),
             ),
                 _profileCompletionCard(),
-                _detailTile(
-                  keyName: "experience",
-                  title: "Add Experience",
-                  subtitle: "Showcase your professional journey",
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      infoRow(
-                        "Experience Level",
-                        experienceLevel.isEmpty ? "Not Added" : experienceLevel,
-                      ),
-
-                      infoRow(
-                        "Min Experience",
-                        minExpController.text.isEmpty
-                            ? "-"
-                            : "${minExpController.text} Years",
-                      ),
-
-                      infoRow(
-                        "Max Experience",
-                        maxExpController.text.isEmpty
-                            ? "-"
-                            : "${maxExpController.text} Years",
-                      ),
-
-                      const SizedBox(height: 15),
-
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _showExperienceDialog,
-                          icon: const Icon(Icons.edit),
-                          label: const Text("Edit"),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                _detailTile(
-                  keyName: "ctc",
-                  title: "Add Current CTC",
-                  subtitle: "Get relevant salary-matched opportunities",
-                  child: Column(
-                    children: [
-                      infoRow(
-                        "Minimum Salary",
-                        "₹${profile?['careerPreference']?['minimumSalaryLPA'] ?? '-'} LPA",
-                      ),
-
-                      infoRow(
-                        "Maximum Salary",
-                        "₹${profile?['careerPreference']?['maximumSalaryLPA'] ?? '-'} LPA",
-                      ),
-
-                      infoRow(
-                        "Preferred Location",
-                        profile?['careerPreference']?['preferredLocation'] ??
-                            '-',
-                      ),
-
-                      const SizedBox(height: 15),
-
-                      ElevatedButton.icon(
-                        onPressed: _showCTCDialog,
-                        icon: const Icon(Icons.edit),
-                        label: const Text("Edit"),
-                      ),
-                    ],
-                  ),
-                ),
-
-                _detailTile(
-                  keyName: "noticePeriod",
-                  title: "Add Notice Period",
-                  subtitle: "Help recruiters understand your availability",
-                  child: Column(
-                    children: [
-                      infoRow(
-                        "Notice Period",
-                        profile?['noticePeriod'] ?? "Not Added",
-                      ),
-
-                      const SizedBox(height: 15),
-
-                      ElevatedButton.icon(
-                        onPressed: _showNoticePeriodDialog,
-
-                        icon: const Icon(Icons.edit),
-                        label: const Text("Edit"),
-                      ),
-                    ],
-                  ),
-                ),
+               
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
@@ -581,6 +327,7 @@ class _JobApplicationStatusScreenState
 
                       return GestureDetector(
                         onTap: () {
+                          print(applications[index]);
                           Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -606,7 +353,7 @@ class _JobApplicationStatusScreenState
                             border: Border.all(
                               color: getStatusColor(
                                 job["status"] ?? "",
-                              ).withOpacity(.3),
+                              ).withValues(alpha: .3),
                             ),
                           ),
                           child: Row(

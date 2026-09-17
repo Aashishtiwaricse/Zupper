@@ -16,7 +16,7 @@ class JobManagementScreen extends StatelessWidget {
 
           /// HEADER
           Container(
-            height: 165,
+            height: 135,
             width: double.infinity,
             decoration: const BoxDecoration(
               color: Color(0xff1E6BE3),
@@ -28,7 +28,7 @@ class JobManagementScreen extends StatelessWidget {
 
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 20,vertical: 5),
 
                 child: Row(
                   children: [
@@ -40,7 +40,7 @@ class JobManagementScreen extends StatelessWidget {
                         width: 48,
                         height: 48,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(.15),
+                          color: Colors.white.withValues(alpha: .15),
                           borderRadius: BorderRadius.circular(14),
                         ),
 
@@ -57,7 +57,7 @@ class JobManagementScreen extends StatelessWidget {
                       "Job Management",
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 25,
+                        fontSize: 22,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -151,7 +151,7 @@ class JobManagementScreen extends StatelessWidget {
                     title,
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
-                      fontSize: 20,
+                      fontSize: 16,
                     ),
                   ),
 

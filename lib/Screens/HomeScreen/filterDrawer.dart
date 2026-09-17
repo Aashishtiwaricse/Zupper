@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:zuperr/Screens/HomeScreen/dynamicFilter.dart';
-import 'package:zuperr/Screens/HomeScreen/filteredJobsScreen.dart';
 import 'package:zuperr/Services/Filter/filterService.dart';
 
 class FilterDrawer {
+  static Map<String, Set<String>> selectedFilters = {};
+
   static void show(
     BuildContext context,
-    List<dynamic> recommendedJobs,
-    Function(List<dynamic>) onApply,
+    Function(Map<String, Set<String>>) onApply,
   ) {
     showGeneralDialog(
       context: context,
@@ -15,27 +15,37 @@ class FilterDrawer {
       barrierLabel: "Filter",
       barrierColor: Colors.black54,
       transitionDuration: const Duration(milliseconds: 350),
-      pageBuilder: (_, __, ___) =>
-          _FilterPanel(recommendedJobs: recommendedJobs, onApply: onApply),
+      pageBuilder: (_, __, ___) => _FilterPanel(
+        onApply: onApply,
+      ),
       transitionBuilder: (_, animation, __, child) {
-        final offset = Tween(
+        final offset = Tween<Offset>(
           begin: const Offset(1, 0),
           end: Offset.zero,
-        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut));
+        ).animate(
+          CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOut,
+          ),
+        );
 
-        return SlideTransition(position: offset, child: child);
+        return SlideTransition(
+          position: offset,
+          child: child,
+        );
       },
     );
+  }
+
+  static void clearAllFilters() {
+    selectedFilters.clear();
   }
 }
 
 class _FilterPanel extends StatefulWidget {
-  final List<dynamic> recommendedJobs;
-  final Function(List<dynamic>) onApply;
+  final Function(Map<String, Set<String>>) onApply;
 
   const _FilterPanel({
-    super.key,
-    required this.recommendedJobs,
     required this.onApply,
   });
 
@@ -44,13 +54,8 @@ class _FilterPanel extends StatefulWidget {
 }
 
 class _FilterPanelState extends State<_FilterPanel> {
-  bool workingExpanded = false;
   Map<String, dynamic>? filterData;
   bool isLoading = true;
-  Set<String> selectedLocations = {};
-  Set<String> selectedWorkModes = {};
-  Set<String> selectedJobTypes = {};
-  Set<String> selectedExperienceLevels = {};
 
   @override
   void initState() {
@@ -59,12 +64,24 @@ class _FilterPanelState extends State<_FilterPanel> {
   }
 
   Future<void> loadFilters() async {
-    final data = await FilterService.getFilters();
+    try {
+      final data = await FilterService.getFilters();
 
-    setState(() {
-      filterData = data["filters"];
-      isLoading = false;
-    });
+      if (!mounted) return;
+
+      setState(() {
+        filterData = data["filters"];
+        isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Filter loading error: $e");
+
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+    }
   }
 
   @override
@@ -92,117 +109,127 @@ class _FilterPanelState extends State<_FilterPanel> {
                       minHeight: constraints.maxHeight,
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 28),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 28,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const SizedBox(height: 26),
 
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text(
                                 "All Filters",
                                 style: TextStyle(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w700,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              GestureDetector(
-                                onTap: () => Navigator.pop(context),
-                                child: const Icon(Icons.close, size: 34),
+
+                              const Spacer(),
+
+                              IconButton(
+                                onPressed: () {
+                                  setState(() {
+                                    FilterDrawer.clearAllFilters();
+                                  });
+                                },
+                                icon: const Icon(
+                                  Icons.restart_alt,
+                                  size: 28,
+                                  color: Color(0xff1954A6),
+                                ),
+                              ),
+
+                              IconButton(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                },
+                                icon: const Icon(
+                                  Icons.close,
+                                  size: 30,
+                                ),
                               ),
                             ],
                           ),
 
                           const SizedBox(height: 38),
+
                           if (isLoading)
                             const Center(
                               child: Padding(
-                                padding: EdgeInsets.symmetric(vertical: 40),
+                                padding: EdgeInsets.symmetric(
+                                  vertical: 40,
+                                ),
                                 child: CircularProgressIndicator(),
+                              ),
+                            )
+                          else if (filterData == null ||
+                              filterData!.isEmpty)
+                            const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(
+                                  vertical: 40,
+                                ),
+                                child: Text(
+                                  "No filters available",
+                                  style: TextStyle(fontSize: 16),
+                                ),
                               ),
                             )
                           else
                             ...filterData!.entries.map((entry) {
                               final title = entry.key;
-                              final values = List<String>.from(entry.value);
+
+                              final values = List<String>.from(
+                                entry.value,
+                              );
 
                               return DynamicFilterSection(
                                 title: title,
                                 values: values,
+                                selectedValues:
+                                    FilterDrawer.selectedFilters[title] ??
+                                        <String>{},
                                 onChanged: (selected) {
                                   setState(() {
-                                    switch (title) {
-                                      case "Cities":
-                                        selectedLocations = selected;
-                                        break;
-
-                                      case "Work Mode":
-                                        selectedWorkModes = selected;
-                                        break;
-
-                                      case "Working Schedule":
-                                        selectedJobTypes = selected;
-                                        break;
-
-                                      case "Experience Level":
-                                        selectedExperienceLevels = selected;
-                                        break;
+                                    if (selected.isEmpty) {
+                                      FilterDrawer.selectedFilters
+                                          .remove(title);
+                                    } else {
+                                      FilterDrawer.selectedFilters[title] =
+                                          Set<String>.from(selected);
                                     }
                                   });
                                 },
                               );
-                            }).toList(),
+                            }),
 
                           const SizedBox(height: 30),
 
                           GestureDetector(
                             onTap: () {
-                              // TODO: Apply filters
+                              final Map<String, Set<String>> selected = {
+                                for (final entry
+                                    in FilterDrawer.selectedFilters.entries)
+                                  entry.key:
+                                      Set<String>.from(entry.value),
+                              };
 
-                              List<dynamic> filtered = widget.recommendedJobs
-                                  .where((job) {
-                                    final cityMatch =
-                                        selectedLocations.isEmpty ||
-                                        selectedLocations.contains(
-                                          job["location"]?.toString(),
-                                        );
-
-                                    final workModeMatch =
-                                        selectedWorkModes.isEmpty ||
-                                        selectedWorkModes.contains(
-                                          job["workMode"]?.toString(),
-                                        );
-
-                                    final scheduleMatch =
-                                        selectedJobTypes.isEmpty ||
-                                        selectedJobTypes.contains(
-                                          job["workingSchedule"]?.toString(),
-                                        );
-
-                                    final experienceMatch =
-                                        selectedExperienceLevels.isEmpty ||
-                                        selectedExperienceLevels.contains(
-                                          job["experienceLevel"]?.toString(),
-                                        );
-
-                                    return cityMatch &&
-                                        workModeMatch &&
-                                        scheduleMatch &&
-                                        experienceMatch;
-                                  })
-                                  .toList();
-
-                              Navigator.pop(context); // Close the filter drawer
-
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      FilteredJobsScreen(jobs: filtered),
-                                ),
+                              debugPrint(
+                                "================================",
                               );
+                              debugPrint("SELECTED FILTERS:");
+                              debugPrint(selected.toString());
+                              debugPrint(
+                                "================================",
+                              );
+
+                              Navigator.pop(context);
+
+                              // SEND SELECTED FILTERS TO SCREEN
+                              widget.onApply(selected);
                             },
                             child: _button(
                               "Apply Filters",
@@ -215,7 +242,13 @@ class _FilterPanelState extends State<_FilterPanel> {
 
                           GestureDetector(
                             onTap: () {
+                              FilterDrawer.clearAllFilters();
+
                               setState(() {});
+
+                              Navigator.pop(context);
+
+                              widget.onApply({});
                             },
                             child: _button(
                               "Clear All",
@@ -238,46 +271,11 @@ class _FilterPanelState extends State<_FilterPanel> {
     );
   }
 
-  static Widget _checkbox(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Row(
-        children: [
-          Container(
-            height: 32,
-            width: 32,
-            decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xff59606D)),
-              borderRadius: BorderRadius.circular(7),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Text(
-            title,
-            style: const TextStyle(fontSize: 17, color: Color(0xff343A46)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static Widget _accordion(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 34),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-          ),
-          const Icon(Icons.keyboard_arrow_down, size: 30),
-        ],
-      ),
-    );
-  }
-
-  static Widget _button(String text, Color bg, Color txt) {
+  Widget _button(
+    String text,
+    Color bg,
+    Color txt,
+  ) {
     return Container(
       height: 52,
       decoration: BoxDecoration(
